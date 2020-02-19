@@ -1,22 +1,22 @@
-# Permalinks
-#
-# Use of `relative_permalinks` ensures post links from the index work properly.
 permalink:           pretty
-relative_permalinks: true
 
 # Setup
-title:               Lanyon
-tagline:             'A Jekyll theme'
-description:         'A reserved <a href="http://jekyllrb.com" target="_blank">Jekyll</a> theme that places the utmost gravity on content with a hidden drawer. Made by <a href="https://twitter.com/mdo" target="_blank">@mdo</a>.'
-url:                 http://lanyon.getpoole.com
+title:               'Catatan Ashura'
+tagline:             'Asif Hummam Rais kalau disingkat jadi apa?'
+description:         'Blog pribadi Asif, seorang mahasiswa Teknik Informatika ITB yang mungkin berisi hal-hal <i>random</i> karena pada dasarnya dunia ini dibentuk oleh entropi molekuler yang bersifat acak.'
+url:                 https://hashshura.github.io
 baseurl:             ''
 paginate:            5
 
 # About/contact
 author:
-  name:              Mark Otto
-  url:               https://twitter.com/mdo
-  email:             markdotto@gmail.com
+  name:         Asif Hummam Rais
+  url:          https://ashura.id
+  email:        hashshura@gmail.com
 
 # Custom vars
 version:             1.0.0
+
+gems: [jekyll-paginate]
+paginate: 5
+paginate_path: "page:num"
