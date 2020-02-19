@@ -309,7 +309,11 @@ a.sidebar-nav-item:focus {
 
 .page,
 .post {
-  border-bottom: 1px solid #e5e5e5;
+  margin-bottom: 4em;
+}
+
+.post:not(:last-child) {
+  border-bottom: 1px solid #eee;
   padding-bottom: 2em;
   margin-bottom: 2em;
 }
@@ -335,7 +339,9 @@ a.sidebar-nav-item:focus {
 
 /* Related posts */
 .related {
+  padding-top: 2rem;
   padding-bottom: 2rem;
+  border-top: 1px solid #eee;
 }
 .related-posts {
   padding-left: 0;
