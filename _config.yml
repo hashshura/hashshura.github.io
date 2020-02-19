@@ -1,4 +1,4 @@
-permalink:           pretty
+permalink:           /:title
 
 # Setup
 title:               'Catatan Ashura'
