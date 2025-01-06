@@ -3,7 +3,7 @@ permalink:           /:title
 # Setup
 title:               'Catatan Ashura'
 tagline:             'Asif Hummam Rais kalau disingkat jadi apa?'
-description:         'Blog pribadi Asif, seorang mahasiswa Teknik Informatika ITB, yang mungkin berisi hal-hal <i>random</i> karena pada dasarnya dunia ini dibentuk oleh entropi molekuler yang bersifat acak.'
+description:         'Blog pribadi Asif, seorang <i>programmer</i> yang hidup biasa-biasa saja dan senang berperilaku kekanak-kanakan.'
 url:                 https://hashshura.github.io
 baseurl:             ''
 paginate:            5
