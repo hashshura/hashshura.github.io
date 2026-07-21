@@ -79,6 +79,7 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   var TOTAL = words.length;
   var PER_WORD = 10;
   var PENALTY = PER_WORD * 10; // crashing costs you 10 words
+  var RAMP_BONUS = PER_WORD * 5; // nailing a ramp launch grants 5 words
   var FINISH = TOTAL * PER_WORD;
   document.getElementById('sk-total').textContent = TOTAL;
 
@@ -132,17 +133,35 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   function jump(){
     if (state==='ready'){ state='playing'; msgEl.textContent='Meluncur! Lompati rintangannya.'; return; }
     if (state==='won'){ return; }
-    if (player.onGround){ player.vy=JUMP; player.onGround=false; player.jumps=1; holdBoost=9; puff(player.x,player.y+player.r); }
+    if (player.onGround){
+      // launch off a ramp if you jump right at its lip → bonus words
+      var ramp=null;
+      for (var i=0;i<obstacles.length;i++){ var o=obstacles[i];
+        if (o.type==='ramp' && !o.used && player.x > o.x+o.w*0.45 && player.x < o.x+o.w+14){ ramp=o; break; } }
+      if (ramp){ rampBonus(ramp); player.vy=JUMP*1.5; holdBoost=12; }
+      else { player.vy=JUMP; holdBoost=9; }
+      player.onGround=false; player.jumps=1; puff(player.x,player.y+player.r);
+    }
     else if (player.jumps<2){ player.vy=DOUBLE; player.jumps=2; holdBoost=6; for(var i=0;i<6;i++) spark(player.x,player.y,'#222'); }
   }
   function releaseJump(){ holdBoost=0; }
+
+  function rampBonus(o){
+    o.used=true;
+    score += RAMP_BONUS;
+    shownWords = Math.floor(score / PER_WORD); // suppress the plain +N note; show AWESOME instead
+    note('AWESOME! +'+(RAMP_BONUS/PER_WORD)+' kata', '#e0a800', -1.3);
+    msgEl.textContent='🤩 AWESOME! Bonus '+(RAMP_BONUS/PER_WORD)+' kata!';
+    for (var i=0;i<24;i++) spark(player.x, player.y-player.r, '#e0a800');
+  }
 
   function puff(x,y){ for(var i=0;i<5;i++) particles.push({x:x+(Math.random()*14-7),y:y,vx:-speed*0.5-Math.random(),vy:Math.random()*-1,life:18,s:2}); }
   function spark(x,y,c){ particles.push({x:x,y:y,vx:Math.random()*3-1.5,vy:Math.random()*3-1.5,life:14,s:2}); }
 
   function spawnObstacle(){
     var roll = Math.random();
-    if (roll<0.4) obstacles.push({type:'rock', x:W+20, y:GROUND, w:24, h:18});
+    if (roll<0.12) obstacles.push({type:'ramp', x:W+20, y:GROUND, w:52, h:30, used:false});
+    else if (roll<0.44) obstacles.push({type:'rock', x:W+20, y:GROUND, w:24, h:18});
     else if (roll<0.7) obstacles.push({type:'box', x:W+20, y:GROUND, w:22, h:30});
     else if (roll<0.88){ obstacles.push({type:'cone', x:W+20, y:GROUND, w:18, h:22}); obstacles.push({type:'cone', x:W+50, y:GROUND, w:18, h:22}); }
     else obstacles.push({type:'bird', x:W+20, y:GROUND-58, w:24, h:14, flap:0});
@@ -183,12 +202,14 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
     for (var i=obstacles.length-1;i>=0;i--){
       var o=obstacles[i]; o.x-=speed;
       if (o.type==='bird'){ o.flap+=0.3; o.y=GROUND-58+Math.sin(o.flap)*7; }
-      var top=o.y-o.h;
-      var cx=Math.max(o.x,Math.min(player.x,o.x+o.w));
-      var cy=Math.max(top,Math.min(player.y,o.y));
-      var dx=player.x-cx, dy=player.y-cy;
-      if (dx*dx+dy*dy < (player.r-1)*(player.r-1)){ hit(); return; }
-      if (o.x+o.w<-10){ obstacles.splice(i,1); score += 4; }
+      if (o.type!=='ramp'){ // ramps are launch pads, not lethal
+        var top=o.y-o.h;
+        var cx=Math.max(o.x,Math.min(player.x,o.x+o.w));
+        var cy=Math.max(top,Math.min(player.y,o.y));
+        var dx=player.x-cx, dy=player.y-cy;
+        if (dx*dx+dy*dy < (player.r-1)*(player.r-1)){ hit(); return; }
+      }
+      if (o.x+o.w<-10){ obstacles.splice(i,1); if (o.type!=='ramp') score += 4; }
     }
 
     for (var p=particles.length-1;p>=0;p--){ var pt=particles[p]; pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=(pt.conf?0.12:0.08); pt.life--; if(pt.life<=0) particles.splice(p,1); }
@@ -233,7 +254,14 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
     // obstacles (doodle outlines)
     for (var i=0;i<obstacles.length;i++){
       var o=obstacles[i]; ink2();
-      if (o.type==='rock'){
+      if (o.type==='ramp'){
+        // up-ramp rising to the right, with a gold star at the lip
+        ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(o.x+o.w,o.y-o.h); ctx.lineTo(o.x+o.w,o.y); ctx.closePath(); ctx.stroke();
+        ctx.fillStyle='#e0a800'; ctx.textAlign='center';
+        ctx.font='bold '+Math.round(H*0.075)+'px sans-serif';
+        ctx.fillText('★', o.x+o.w, o.y-o.h-4);
+        ctx.textAlign='left';
+      } else if (o.type==='rock'){
         ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.quadraticCurveTo(o.x+2,o.y-o.h,o.x+o.w*0.45,o.y-o.h);
         ctx.quadraticCurveTo(o.x+o.w,o.y-o.h*0.8,o.x+o.w,o.y); ctx.closePath(); ctx.stroke();
       } else if (o.type==='box'){
@@ -276,18 +304,21 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
       ctx.globalAlpha=1;
     }
 
-    // overlays
+    // overlays — auto-shrink so text never clips on narrow screens
     ctx.textAlign='center'; ctx.fillStyle='#222';
+    function fit(text, px, bold){
+      var pre = bold ? 'bold ' : '';
+      px = Math.round(px);
+      ctx.font = pre+px+'px sans-serif';
+      while (px>9 && ctx.measureText(text).width > W*0.9){ px--; ctx.font = pre+px+'px sans-serif'; }
+    }
     if (state==='ready'){
-      ctx.font='bold '+Math.round(H*0.18)+'px sans-serif';
-      ctx.fillText('🛹 SKATE OR DIE', W/2, H*0.42);
-      ctx.font=Math.round(H*0.1)+'px sans-serif';
-      ctx.fillText('▶ Tap / Spasi untuk meluncur', W/2, H*0.62);
+      fit('🛹 SKATE OR DIE', H*0.18, true); ctx.fillText('🛹 SKATE OR DIE', W/2, H*0.42);
+      fit('▶ Tap / Spasi untuk meluncur', H*0.1, false); ctx.fillText('▶ Tap / Spasi untuk meluncur', W/2, H*0.62);
     } else if (state==='won'){
-      ctx.font='bold '+Math.round(H*0.2)+'px sans-serif';
-      ctx.fillText('🎉 SELAMAT!', W/2, H*0.44);
-      ctx.font=Math.round(H*0.1)+'px sans-serif';
-      ctx.fillText('Semua kata terbuka. Selamat membaca!', W/2, H*0.64);
+      fit('🎉 SELAMAT!', H*0.2, true); ctx.fillText('🎉 SELAMAT!', W/2, H*0.4);
+      fit('Semua kata terbuka.', H*0.1, false); ctx.fillText('Semua kata terbuka.', W/2, H*0.58);
+      fit('Selamat membaca! Tap untuk lanjut.', H*0.09, false); ctx.fillText('Selamat membaca! Tap untuk lanjut.', W/2, H*0.72);
     }
     ctx.textAlign='left';
   }
@@ -307,6 +338,13 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   window.addEventListener('keydown', function(e){ if(e.code==='Space'||e.key===' '||e.key==='ArrowUp'){ e.preventDefault(); press(e); }});
   window.addEventListener('keyup', function(e){ if(e.code==='Space'||e.key===' '||e.key==='ArrowUp'){ releaseJump(); }});
   window.addEventListener('resize', function(){ sizeCanvas(); });
+
+  // tap ANYWHERE on the page to jump (click doesn't fire on scroll, so it
+  // won't hijack scrolling). Skip links/buttons and the canvas (handled above).
+  document.addEventListener('click', function(e){
+    if (e.target===cv || (e.target.closest && e.target.closest('a,button,input,textarea,select,label'))) return;
+    jump(); releaseJump();
+  });
 
   sizeCanvas();
   checkpoint = 0;
