@@ -2,6 +2,8 @@
 layout: post
 title: Skate or Die (baca sambil meluncur!)
 comments: true
+thumbnail: /assets/img/2026-07-21-skate-or-die.png
+teaser: "Postingan ini ditulis pakai tinta tak terlihat. Kata-katanya cuma muncul kalau kamu berani meluncur dan menghindari rintangan. Jatuh? Sepuluh kata langsung lenyap. Berani coba?"
 ---
 
 <style>
@@ -19,7 +21,7 @@ comments: true
 </style>
 
 <div id="skate-banner">
-  <canvas id="skate-canvas" width="720" height="180"></canvas>
+  <canvas id="skate-canvas" width="720" height="300"></canvas>
   <div id="skate-progress"><i></i></div>
   <div class="bar">
     <span>🛹 <b id="sk-words">0</b> / <b id="sk-total">0</b> kata terbuka</span>
@@ -34,7 +36,7 @@ _Katanya orang dewasa harus berhenti main-main. Tapi lihat—kamu di sini, mendo
 
 Setiap kata di halaman ini terkunci sebagai tinta tak terlihat. Ia baru muncul kalau kamu meluncur cukup jauh dan menghindari batu, kardus, serta kerucut yang menghadang. Sepuluh langkah, satu kata. Sabar sedikit, ya.
 
-Tidak ada yang instan di sini, sama seperti kebanyakan hal yang layak dibaca. Kalau kamu terjatuh, jangan khawatir: kata-kata yang sudah terbuka akan tetap tinggal. Kamu cuma perlu terus bergerak ke depan.
+Tidak ada yang instan di sini, sama seperti kebanyakan hal yang layak dibaca. Tapi hati-hati: setiap kali kamu jatuh, sepuluh kata terakhir ikut lenyap dari halaman. Jadi jangan asal lompat—timing itu segalanya, dan kamu harus benar-benar bergerak maju.
 
 Jadi teruslah meluncur. Lompati setiap rintangannya. Biarkan cerita ini menyusun dirinya sendiri, sedikit demi sedikit, tepat di bawah roda papanmu—sampai kata yang paling terakhir, dan papan itu akhirnya boleh berhenti.
 
@@ -76,6 +78,7 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
 
   var TOTAL = words.length;
   var PER_WORD = 10;
+  var PENALTY = PER_WORD * 10; // crashing costs you 10 words
   var FINISH = TOTAL * PER_WORD;
   document.getElementById('sk-total').textContent = TOTAL;
 
@@ -100,22 +103,28 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
 
   function sizeCanvas(){
     var cssW = cv.clientWidth || cv.parentElement.clientWidth || 720;
-    var ratio = 180/720;
+    // taller aspect so a double-jump never clips off the top; capped so the
+    // sticky banner never eats the whole viewport.
+    var h = Math.max(220, Math.min(340, cssW*0.42));
     cv.width = W = Math.round(cssW);
-    cv.height = H = Math.round(cssW*ratio);
+    cv.height = H = Math.round(h);
     GROUND = H - 34;
     if (player) player.y = Math.min(player.y, GROUND);
   }
 
   var state = 'ready'; // ready | playing | won
-  var player, obstacles, particles, t, speed, spawnT, score, holdBoost, checkpoint, flash;
+  var player, obstacles, particles, notes, t, speed, spawnT, score, holdBoost, checkpoint, flash, shownWords;
 
   function reset(keepScore){
     var s = keepScore ? checkpoint : 0;
     player = { x: 70, y: GROUND, vy:0, r:12, rot:0, onGround:true, jumps:0 };
-    obstacles = []; particles = [];
+    obstacles = []; particles = []; notes = [];
     t = 0; speed = 4.2; spawnT = 40;
-    score = s; holdBoost = 0; flash = 0;
+    score = s; holdBoost = 0; flash = 0; shownWords = Math.floor(s / PER_WORD);
+  }
+
+  function note(text, color, up){
+    notes.push({text:text, color:color, x:player.x+18, y:player.y-player.r-18, vy:up||-0.9, life:52, max:52});
   }
 
   var GRAV = 0.6, JUMP = -9.2, DOUBLE = -7.8;
@@ -140,11 +149,18 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   }
 
   function hit(){
-    checkpoint = Math.floor(reveal(score)) * PER_WORD; // fall back to last full word
-    flash = 12;
-    for(var i=0;i<14;i++) spark(player.x,player.y,'#222');
+    var before = Math.floor(score / PER_WORD);
+    score = Math.max(0, score - PENALTY); // lose 10 words for crashing
+    var lost = before - Math.floor(score / PER_WORD);
+    checkpoint = score;
+    flash = 22;
+    msgEl.textContent = lost>0 ? ('💥 Nabrak! −'+lost+' kata') : '💥 Nabrak!';
+    for(var i=0;i<18;i++) spark(player.x,player.y,'#c0392b');
+    var px=player.x, py=player.y, pr=player.r;
     reset(true);
+    notes.push({text: lost>0 ? ('−'+lost+' kata') : 'Nabrak!', color:'#c0392b', x:px+18, y:py-pr-18, vy:-0.9, life:70, max:70});
     state='playing';
+    reveal(score);
   }
 
   function win(){
@@ -176,9 +192,12 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
     }
 
     for (var p=particles.length-1;p>=0;p--){ var pt=particles[p]; pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=(pt.conf?0.12:0.08); pt.life--; if(pt.life<=0) particles.splice(p,1); }
+    for (var q=notes.length-1;q>=0;q--){ var nt=notes[q]; nt.y+=nt.vy; nt.life--; if(nt.life<=0) notes.splice(q,1); }
 
     score += speed*0.09; // distance skated
     scoreEl.textContent = score|0;
+    var nowWords = Math.floor(score / PER_WORD);
+    if (nowWords > shownWords){ note('+'+(nowWords-shownWords)+' kata', '#2e7d32'); shownWords = nowWords; }
     reveal(score);
     if (score>=FINISH) win();
   }
@@ -199,7 +218,7 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   }
 
   function draw(){
-    ctx.fillStyle = flash>0 ? '#fdeaea' : '#fbfbf7';
+    ctx.fillStyle = '#fbfbf7';
     ctx.fillRect(0,0,W,H);
     ink2();
 
@@ -237,6 +256,25 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
     ctx.globalAlpha=1;
 
     drawPlayer();
+
+    // floating notifications (+1 kata / −10 kata)
+    ctx.textAlign='center';
+    for (var q=0;q<notes.length;q++){
+      var nt=notes[q];
+      ctx.globalAlpha=Math.max(0,Math.min(1, nt.life/nt.max*1.4));
+      ctx.fillStyle=nt.color;
+      ctx.font='bold '+Math.round(H*0.075)+'px sans-serif';
+      ctx.fillText(nt.text, nt.x, nt.y);
+    }
+    ctx.globalAlpha=1; ctx.textAlign='left';
+
+    // subtle red blip on crash — a soft fade, never a harsh strobe
+    if (flash>0){
+      ctx.globalAlpha=(flash/22)*0.22;
+      ctx.fillStyle='#c0392b';
+      ctx.fillRect(0,0,W,H);
+      ctx.globalAlpha=1;
+    }
 
     // overlays
     ctx.textAlign='center'; ctx.fillStyle='#222';
