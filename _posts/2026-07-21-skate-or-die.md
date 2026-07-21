@@ -83,6 +83,10 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   var FINISH = TOTAL * PER_WORD;
   document.getElementById('sk-total').textContent = TOTAL;
 
+  var BEST_KEY = 'ashura_skate_highscore';
+  var best = 0;
+  try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch(e){}
+
   var wordsEl = document.getElementById('sk-words');
   var progEl = document.querySelector('#skate-progress > i');
   function reveal(score){
@@ -93,6 +97,10 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
     wordsEl.textContent = n;
     progEl.style.width = Math.min(100,(score/FINISH)*100)+'%';
     return n;
+  }
+  function revealAll(){
+    for (var i=0;i<TOTAL;i++) words[i].classList.add('on');
+    wordsEl.textContent = TOTAL; progEl.style.width = '100%';
   }
 
   // ---- the game (white, doodle style) ----
@@ -113,7 +121,8 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
     if (player) player.y = Math.min(player.y, GROUND);
   }
 
-  var state = 'ready'; // ready | playing | won
+  var state = 'ready'; // ready | playing | won | score | scoredead
+  var scoreMode = false;
   var player, obstacles, particles, notes, t, speed, spawnT, score, holdBoost, checkpoint, flash, shownWords;
 
   function reset(keepScore){
@@ -124,6 +133,12 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
     score = s; holdBoost = 0; flash = 0; shownWords = Math.floor(s / PER_WORD);
   }
 
+  function startScoreMode(){
+    scoreMode = true; state = 'score';
+    reset(false); revealAll();
+    msgEl.textContent = 'Mode skor tertinggi — bertahan selama mungkin!';
+  }
+
   function note(text, color, up){
     notes.push({text:text, color:color, x:player.x+18, y:player.y-player.r-18, vy:up||-0.9, life:52, max:52});
   }
@@ -132,7 +147,7 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
 
   function jump(){
     if (state==='ready'){ state='playing'; msgEl.textContent='Meluncur! Lompati rintangannya.'; return; }
-    if (state==='won'){ return; }
+    if (state==='won' || state==='scoredead'){ startScoreMode(); return; }
     if (player.onGround){
       // launch off a ramp if you jump right at its lip → bonus words
       var ramp=null;
@@ -168,13 +183,19 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   }
 
   function hit(){
+    flash = 22;
+    for(var i=0;i<18;i++) spark(player.x,player.y,'#c0392b');
+    if (scoreMode){ // endless run ends; record best
+      if ((score|0) > best){ best = score|0; try{localStorage.setItem(BEST_KEY, String(best));}catch(e){} }
+      state = 'scoredead';
+      msgEl.textContent = '💥 Jatuh! Skor: '+(score|0)+' • Terbaik: '+best;
+      return;
+    }
     var before = Math.floor(score / PER_WORD);
     score = Math.max(0, score - PENALTY); // lose 10 words for crashing
     var lost = before - Math.floor(score / PER_WORD);
     checkpoint = score;
-    flash = 22;
     msgEl.textContent = lost>0 ? ('💥 Nabrak! −'+lost+' kata') : '💥 Nabrak!';
-    for(var i=0;i<18;i++) spark(player.x,player.y,'#c0392b');
     var px=player.x, py=player.y, pr=player.r;
     reset(true);
     notes.push({text: lost>0 ? ('−'+lost+' kata') : 'Nabrak!', color:'#c0392b', x:px+18, y:py-pr-18, vy:-0.9, life:70, max:70});
@@ -183,8 +204,9 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   }
 
   function win(){
-    state='won'; score=FINISH; reveal(score);
-    msgEl.textContent='Selesai! Halaman terbuka penuh 🎉';
+    state='won'; score=FINISH; revealAll();
+    msgEl.textContent='Selesai! Semua kata terbuka 🎉';
+    notes = [];
     for(var i=0;i<50;i++) particles.push({x:W/2+(Math.random()*W*0.4-W*0.2),y:H*0.4,vx:Math.random()*6-3,vy:Math.random()*-4-1,life:60,s:3,conf:true});
   }
 
@@ -212,15 +234,28 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
       if (o.x+o.w<-10){ obstacles.splice(i,1); if (o.type!=='ramp') score += 4; }
     }
 
+    // ride up ramps instead of passing through them (only while grounded/falling,
+    // so an intentional jump still launches off the lip)
+    if (player.vy >= 0){
+      for (var rr=0;rr<obstacles.length;rr++){ var rp=obstacles[rr];
+        if (rp.type==='ramp' && player.x>=rp.x && player.x<=rp.x+rp.w){
+          var surf = rp.y - rp.h*((player.x-rp.x)/rp.w);
+          if (player.y >= surf){ player.y=surf; player.vy=0; player.onGround=true; player.jumps=0; player.rot=-Math.atan2(rp.h,rp.w); }
+        }
+      }
+    }
+
     for (var p=particles.length-1;p>=0;p--){ var pt=particles[p]; pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=(pt.conf?0.12:0.08); pt.life--; if(pt.life<=0) particles.splice(p,1); }
     for (var q=notes.length-1;q>=0;q--){ var nt=notes[q]; nt.y+=nt.vy; nt.life--; if(nt.life<=0) notes.splice(q,1); }
 
     score += speed*0.09; // distance skated
     scoreEl.textContent = score|0;
-    var nowWords = Math.floor(score / PER_WORD);
-    if (nowWords > shownWords){ note('+'+(nowWords-shownWords)+' kata', '#2e7d32'); shownWords = nowWords; }
-    reveal(score);
-    if (score>=FINISH) win();
+    if (!scoreMode){
+      var nowWords = Math.floor(score / PER_WORD);
+      if (nowWords > shownWords){ note('+'+(nowWords-shownWords)+' kata', '#2e7d32'); shownWords = nowWords; }
+      reveal(score);
+      if (score>=FINISH) win();
+    }
   }
 
   function ink2(){ ctx.strokeStyle='#222'; ctx.fillStyle='#222'; ctx.lineWidth=2.4; ctx.lineJoin='round'; ctx.lineCap='round'; }
@@ -316,15 +351,19 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
       fit('🛹 SKATE OR DIE', H*0.18, true); ctx.fillText('🛹 SKATE OR DIE', W/2, H*0.42);
       fit('▶ Tap / Spasi untuk meluncur', H*0.1, false); ctx.fillText('▶ Tap / Spasi untuk meluncur', W/2, H*0.62);
     } else if (state==='won'){
-      fit('🎉 SELAMAT!', H*0.2, true); ctx.fillText('🎉 SELAMAT!', W/2, H*0.4);
-      fit('Semua kata terbuka.', H*0.1, false); ctx.fillText('Semua kata terbuka.', W/2, H*0.58);
-      fit('Selamat membaca! Tap untuk lanjut.', H*0.09, false); ctx.fillText('Selamat membaca! Tap untuk lanjut.', W/2, H*0.72);
+      fit('🎉 SELAMAT!', H*0.2, true); ctx.fillText('🎉 SELAMAT!', W/2, H*0.38);
+      fit('Semua kata terbuka — selamat membaca!', H*0.088, false); ctx.fillText('Semua kata terbuka — selamat membaca!', W/2, H*0.55);
+      ctx.fillStyle='#e0a800'; fit('🏆 Tap untuk MODE SKOR TERTINGGI', H*0.088, true); ctx.fillText('🏆 Tap untuk MODE SKOR TERTINGGI', W/2, H*0.7);
+    } else if (state==='scoredead'){
+      ctx.fillStyle='#c0392b'; fit('💥 JATUH!', H*0.2, true); ctx.fillText('💥 JATUH!', W/2, H*0.38);
+      ctx.fillStyle='#222'; fit('Skor: '+(score|0)+'  •  Terbaik: '+best, H*0.1, false); ctx.fillText('Skor: '+(score|0)+'  •  Terbaik: '+best, W/2, H*0.56);
+      fit('Tap untuk coba lagi', H*0.09, false); ctx.fillText('Tap untuk coba lagi', W/2, H*0.7);
     }
     ctx.textAlign='left';
   }
 
   function loop(){
-    if (state==='playing') update();
+    if (state==='playing' || state==='score') update();
     else { for (var p=particles.length-1;p>=0;p--){ var pt=particles[p]; pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=(pt.conf?0.12:0.08); pt.life--; if(pt.life<=0) particles.splice(p,1);} }
     draw();
     requestAnimationFrame(loop);
