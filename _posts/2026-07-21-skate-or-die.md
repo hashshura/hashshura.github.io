@@ -48,23 +48,27 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   var ink = document.getElementById('ink');
   var words = [];
   (function walk(node){
-    for (var i=0;i<node.childNodes.length;i++){
-      var n = node.childNodes[i];
+    // snapshot children first: we mutate the tree as we go, and appending a
+    // DocumentFragment empties it, so a live childNodes loop would re-process
+    // the spans we just created (infinite loop).
+    var kids = Array.prototype.slice.call(node.childNodes);
+    for (var k=0;k<kids.length;k++){
+      var n = kids[k];
       if (n.nodeType===3){ // text node
+        if (!/\S/.test(n.nodeValue)) continue; // whitespace-only, leave as is
         var parts = n.nodeValue.split(/(\s+)/);
-        if (parts.length<=1 && !/\S/.test(n.nodeValue)) continue;
         var frag = document.createDocumentFragment();
         for (var p=0;p<parts.length;p++){
           if (/\S/.test(parts[p])){
             var s = document.createElement('span');
             s.className='w'; s.textContent=parts[p];
             frag.appendChild(s); words.push(s);
-          } else {
+          } else if (parts[p]){
             frag.appendChild(document.createTextNode(parts[p]));
           }
         }
-        node.replaceChild(frag, n); i += frag.childNodes.length-1;
-      } else if (n.nodeType===1){
+        node.replaceChild(frag, n);
+      } else if (n.nodeType===1){ // element (e.g. <em>) — recurse, never a created span
         walk(n);
       }
     }
