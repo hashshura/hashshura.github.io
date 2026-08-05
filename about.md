@@ -128,22 +128,33 @@ Sisanya bukan angka, cuma keterangan tambahan.
     },
     {
       title: 'Tanggal lahir',
-      note: ['Semua angkanya dijumlahkan. Hasilnya itu lagi.'],
+      note: ['Semua angkanya dijumlahkan. Hasilnya itu lagi.', 'Tanggal dan bulannya rahasia, yaa.'],
       art: function(ctx, W, H){
-        var n = 8, bw = 18, gap = 12, tot = n*bw + (n-1)*gap;
-        var x0 = W/2 - tot/2, y = 84;
-        ink(ctx, 1.9);
+        var digits = ['','','','','1','9','9','9']; // year is public, the rest is not
+        var n = 8, bw = 18, gap = 11, tot = n*bw + (n-1)*gap;
+        var x0 = W/2 - tot/2, y = 80;
         for (var i=0;i<n;i++){
           var x = x0 + i*(bw+gap);
+          ink(ctx, 1.9);
           ctx.strokeRect(x, y, bw, bw);
-          if (i < n-1){
+          if (digits[i]) txt(ctx, digits[i], x+bw/2, y+bw-4, 15, INK, true);
+          else {
+            // a hidden digit: a couple of scribble strokes
+            ctx.lineWidth = 1.5; ctx.strokeStyle = '#c9c9bf';
             ctx.beginPath();
-            ctx.moveTo(x+bw+gap/2-4, y+bw/2); ctx.lineTo(x+bw+gap/2+4, y+bw/2);
-            ctx.moveTo(x+bw+gap/2, y+bw/2-4); ctx.lineTo(x+bw+gap/2, y+bw/2+4);
+            ctx.moveTo(x+4, y+bw-5); ctx.lineTo(x+bw-4, y+5);
+            ctx.moveTo(x+4, y+bw-9); ctx.lineTo(x+bw-8, y+5);
+            ctx.stroke();
+          }
+          if (i < n-1){
+            ink(ctx, 1.7);
+            ctx.beginPath();
+            ctx.moveTo(x+bw+gap/2-3.5, y+bw/2); ctx.lineTo(x+bw+gap/2+3.5, y+bw/2);
+            ctx.moveTo(x+bw+gap/2, y+bw/2-3.5); ctx.lineTo(x+bw+gap/2, y+bw/2+3.5);
             ctx.stroke();
           }
         }
-        txt(ctx, '= 42', W/2, 152, 30, INK, true);
+        txt(ctx, '= 42', W/2, 150, 30, INK, true);
       }
     },
     {
@@ -517,6 +528,41 @@ Sisanya bukan angka, cuma keterangan tambahan.
           var yy = cy - 20 + Math.floor(i/4)*20;
           ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x+2, yy+14); ctx.stroke();
         }
+      }
+    },
+    {
+      title: 'Domain pribadi',
+      note: ['Lulusan ITB, domainnya UGM.', 'Belum ada yang menuntut sampai hari ini.'],
+      art: function(ctx, W, H){
+        var cx = W/2, bw = Math.min(250, W-90), bx = cx - bw/2, by = 62;
+        ink(ctx, 2);
+        // an address bar
+        rr(ctx, bx, by, bw, 32, 16);
+        // padlock
+        ctx.lineWidth = 1.7;
+        ctx.strokeRect(bx+17, by+16, 10, 8);
+        ctx.beginPath(); ctx.arc(bx+22, by+16, 4, Math.PI, 0); ctx.stroke();
+        txt(ctx, 'asif.ugm.id', cx + 12, by+21, 15, INK, true, bw-60);
+        // a shrugging figure with an ITB name tag
+        var hx = cx - 22, hy = 114;
+        ink(ctx);
+        ctx.beginPath(); ctx.arc(hx, hy, 13, 0, 7); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(hx, hy+13); ctx.lineTo(hx, hy+34);
+        ctx.moveTo(hx, hy+34); ctx.lineTo(hx-10, hy+50);
+        ctx.moveTo(hx, hy+34); ctx.lineTo(hx+10, hy+50);
+        // arms out, palms up
+        ctx.moveTo(hx, hy+20); ctx.lineTo(hx-18, hy+24); ctx.lineTo(hx-24, hy+12);
+        ctx.moveTo(hx, hy+20); ctx.lineTo(hx+18, hy+24); ctx.lineTo(hx+24, hy+12);
+        ctx.stroke();
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(hx-5, hy-3, 1.5, 0, 7); ctx.arc(hx+5, hy-3, 1.5, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(hx-4, hy+5); ctx.lineTo(hx+4, hy+5); ctx.stroke();
+        // name tag
+        ink(ctx, 1.8);
+        ctx.strokeRect(hx+34, hy+16, 30, 16);
+        txt(ctx, 'ITB', hx+49, hy+28, 11, INK, true);
       }
     },
     {
