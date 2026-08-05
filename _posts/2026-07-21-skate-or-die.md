@@ -62,7 +62,7 @@ Waktu saya berjalan di rute lain: Kyrgyzstan, Kazakhstan, Uzbekistan, China, Nag
 
 Dewasa bukan checklist. Checklist itu formulir. Yang menyamakan keduanya biasanya belum pernah ditanya apa yang dia mau.
 
-### Optimistic nihilism
+### Tidak ada papan skor
 
 Alam semesta tidak menyimpan skor. Tidak ada juri, tidak ada papan peringkat, tidak ada notaris yang mencatat bahwa kamu tepat waktu. Semua ini akan jadi debu di atas batu yang berputar mengelilingi bola gas yang juga akan mati.
 

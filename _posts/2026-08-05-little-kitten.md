@@ -64,7 +64,7 @@ Lalu mereka naik ke plafon. Tengah malam, empat kucing kecil menggelar pertunjuk
 
 Saya tidak pernah jadi pemilik mereka. Selama beberapa bulan saya cuma orang yang mereka datangi. Ternyata itu bentuk hubungan yang lebih jujur: tidak ada yang dimiliki, tidak ada yang dijanjikan, dan mereka tetap datang.
 
-### Optimistic nihilism
+### Yang tidak dicatat siapa pun
 
 Kucing tidak punya rencana lima tahun. Tidak menabung. Tidak peduli IPK, tidak peduli promosi, dan tidak akan datang ke pemakaman saya. Mereka makan, tidur, jatuh dari tempat tinggi dengan gaya, lalu mengulanginya besok tanpa rasa malu.
 
