@@ -110,7 +110,7 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
 
   var TOTAL = words.length;
   var FOOD_SCORE = 55;        // score per bite
-  var TARGET_BITES = 28;      // a clean run ≈ 28 bites, however long the post gets
+  var TARGET_BITES = 17;      // a clean run ≈ 17 bites, however long the post gets
   var PER_WORD = Math.max(1.5, FOOD_SCORE * TARGET_BITES / TOTAL);
   var GROW_STEPS = 10;        // kitten reaches full size after 10 bites
   var STARVE_COST = 12 * PER_WORD;  // dying of hunger costs 12 words

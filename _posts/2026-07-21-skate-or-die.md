@@ -107,10 +107,11 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
   })(ink);
 
   var TOTAL = words.length;
-  // a flawless run should take ~45s no matter how long the post gets
-  var PER_WORD = Math.max(1.5, 1450 / TOTAL);
+  // a flawless run should take ~20s no matter how long the post gets
+  var PER_WORD = Math.max(1, 700 / TOTAL);
   var PENALTY = PER_WORD * 25; // crashing costs you 25 words
   var RAMP_BONUS = PER_WORD * 12; // nailing a ramp launch grants 12 words
+  var NOTE_CHUNK = 12; // words per popup — one popup per word machine-guns
   var FINISH = TOTAL * PER_WORD;
   document.getElementById('sk-total').textContent = TOTAL;
 
@@ -283,7 +284,10 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
     scoreEl.textContent = score|0;
     if (!scoreMode){
       var nowWords = Math.floor(score / PER_WORD);
-      if (nowWords > shownWords){ note('+'+(nowWords-shownWords)+' kata', '#2e7d32'); shownWords = nowWords; }
+      var gained = nowWords - shownWords;
+      if (gained >= NOTE_CHUNK || (gained > 0 && nowWords >= TOTAL)){
+        note('+'+gained+' kata', '#2e7d32'); shownWords = nowWords;
+      }
       reveal(score);
       if (score>=FINISH) win();
     }
