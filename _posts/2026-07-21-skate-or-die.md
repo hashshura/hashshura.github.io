@@ -1,9 +1,9 @@
 ---
 layout: post
-title: Skate or Die (baca sambil meluncur!)
+title: I'm a Fucking Adult Yet I Am Learning How to Skate
 comments: true
 thumbnail: /assets/img/2026-07-21-skate-or-die.png
-teaser: "Postingan ini ditulis pakai tinta tak terlihat. Kata-katanya cuma muncul kalau kamu berani meluncur dan menghindari rintangan. Jatuh? Sepuluh kata langsung lenyap. Berani coba?"
+teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya sudah mau menikah. Ceritanya ditulis pakai tinta tak terlihat — cuma muncul kalau kamu ikut meluncur dan tidak nabrak."
 ---
 
 <style>
@@ -32,15 +32,45 @@ teaser: "Postingan ini ditulis pakai tinta tak terlihat. Kata-katanya cuma muncu
 
 <div id="ink" markdown="1">
 
-_Katanya orang dewasa harus berhenti main-main. Tapi lihat—kamu di sini, mendorong sebuah papan skateboard hanya untuk memunculkan sebuah tulisan._
+_Umur 26, dan saya baru belajar berdiri di atas papan. Ceritanya ditulis pakai tinta tak terlihat—ia muncul kalau kamu ikut meluncur._
 
-Setiap kata di halaman ini terkunci sebagai tinta tak terlihat. Ia baru muncul kalau kamu meluncur cukup jauh dan menghindari batu, kardus, serta kerucut yang menghadang. Sepuluh langkah, satu kata. Sabar sedikit, ya.
+___
 
-Tidak ada yang instan di sini, sama seperti kebanyakan hal yang layak dibaca. Tapi hati-hati: setiap kali kamu jatuh, sepuluh kata terakhir ikut lenyap dari halaman. Jadi jangan asal lompat—timing itu segalanya, dan kamu harus benar-benar bergerak maju.
+### Mei 2026
 
-Jadi teruslah meluncur. Lompati setiap rintangannya. Biarkan cerita ini menyusun dirinya sendiri, sedikit demi sedikit, tepat di bawah roda papanmu—sampai kata yang paling terakhir, dan papan itu akhirnya boleh berhenti.
+Saya beli longboard. Dua minggu kemudian saya beli surfskate. Tidak ada pencerahan, tidak ada film inspiratif sebelumnya. Saya memutuskan ingin bisa, lalu mulai.
 
-Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah utuh, sama seperti tulisan biasa. Asif, _signing off._ 🛹
+Aspal mengajar tanpa kurikulum. Ia tidak peduli jabatanmu, gajimu, atau jumlah tahun yang kamu tulis di CV. Tarifnya lecet di dengkul, dibayar di tempat, tidak menerima transfer.
+
+> _Gravitasi adalah satu-satunya atasan yang tidak pernah bohong soal deadline._
+
+Saya sudah jatuh cukup sering untuk berhenti menganggap jatuh sebagai kabar buruk. Itu bukan filosofi. Itu statistik.
+
+### Kalender
+
+Agustus 2026: surfing. Secara teknis hanya memindahkan tempat jatuh dari beton ke air.
+
+2027: salju Myoko, lalu Hokkaido. Jatuh dalam bahasa Jepang.
+
+Empat medium, satu keterampilan yang sama—berdiri di atas sesuatu yang tidak stabil dan tetap memilih arah. Saya tidak sedang mengumpulkan hobi. Saya sedang memakai badan ini sebelum ia mulai mengajukan syarat dan ketentuan.
+
+### Dua jenis waktu
+
+Adik saya akan menikah. Saya senang, tanpa catatan kaki. Ia memilih jalannya lebih awal dan menjalaninya dengan serius, dan itu pantas dihormati.
+
+Waktu saya berjalan di rute lain: Kyrgyzstan, Kazakhstan, Uzbekistan, China, Nagano. Punggung kuda, jalan tanpa aspal, bahasa yang tidak saya kuasai. Saya tidak melarikan diri dari apa pun. Saya hanya tidak pernah setuju bahwa urutan hidup ditentukan oleh orang-orang yang tidak akan menjalaninya.
+
+Dewasa bukan checklist. Checklist itu formulir. Yang menyamakan keduanya biasanya belum pernah ditanya apa yang dia mau.
+
+### Optimistic nihilism
+
+Alam semesta tidak menyimpan skor. Tidak ada juri, tidak ada papan peringkat, tidak ada notaris yang mencatat bahwa kamu tepat waktu. Semua ini akan jadi debu di atas batu yang berputar mengelilingi bola gas yang juga akan mati.
+
+Itu bukan alasan untuk menyerah. Itu izin. Kalau memang tidak ada yang mengawasi, tidak ada juga yang berwenang memutuskan bahwa hidup saya salah bentuk.
+
+Jadi saya carve. Saya jatuh. Saya bangun, cek dengkul, lanjut—sampai halaman ini penuh.
+
+Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya jatuh, kamu boleh lihat. Asif, _signing off._ 🛹
 
 </div>
 
@@ -77,9 +107,10 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
   })(ink);
 
   var TOTAL = words.length;
-  var PER_WORD = 10;
-  var PENALTY = PER_WORD * 10; // crashing costs you 10 words
-  var RAMP_BONUS = PER_WORD * 5; // nailing a ramp launch grants 5 words
+  // a flawless run should take ~45s no matter how long the post gets
+  var PER_WORD = Math.max(1.5, 1450 / TOTAL);
+  var PENALTY = PER_WORD * 25; // crashing costs you 25 words
+  var RAMP_BONUS = PER_WORD * 12; // nailing a ramp launch grants 12 words
   var FINISH = TOTAL * PER_WORD;
   document.getElementById('sk-total').textContent = TOTAL;
 
@@ -348,8 +379,9 @@ Terima kasih sudah menemani sampai ke ujung jalan. Sekarang halaman ini sudah ut
       while (px>9 && ctx.measureText(text).width > W*0.9){ px--; ctx.font = pre+px+'px sans-serif'; }
     }
     if (state==='ready'){
-      fit('🛹 SKATE OR DIE', H*0.18, true); ctx.fillText('🛹 SKATE OR DIE', W/2, H*0.42);
-      fit('▶ Tap / Spasi untuk meluncur', H*0.1, false); ctx.fillText('▶ Tap / Spasi untuk meluncur', W/2, H*0.62);
+      fit("🛹 I'M A FUCKING ADULT", H*0.15, true); ctx.fillText("🛹 I'M A FUCKING ADULT", W/2, H*0.34);
+      fit('yet I am learning how to skate', H*0.11, false); ctx.fillText('yet I am learning how to skate', W/2, H*0.52);
+      fit('▶ Tap / Spasi untuk meluncur', H*0.095, false); ctx.fillText('▶ Tap / Spasi untuk meluncur', W/2, H*0.72);
     } else if (state==='won'){
       fit('🎉 SELAMAT!', H*0.2, true); ctx.fillText('🎉 SELAMAT!', W/2, H*0.38);
       fit('Semua kata terbuka — selamat membaca!', H*0.088, false); ctx.fillText('Semua kata terbuka — selamat membaca!', W/2, H*0.55);

@@ -1,9 +1,9 @@
 ---
 layout: post
-title: Little Kitten (kasih makan dulu, baru boleh baca!)
+title: Little Kitten
 comments: true
 thumbnail: /assets/img/2026-08-05-little-kitten.png
-teaser: "Kata-kata di postingan ini dijaga seekor anak kucing yang kelaparan. Suapi ia, dan ia akan tumbuh sambil membuka tulisannya. Tapi hati-hati: sesekali yang muncul bukan makanan, melainkan cokelat."
+teaser: "Saya suka kucing dan tidak pernah berhasil memelihara satu pun — pernah hampir membunuh satu pakai segelas susu sapi. Ceritanya cuma muncul kalau kamu mau menyuapi kucing di atas dulu."
 ---
 
 <style>
@@ -32,17 +32,47 @@ teaser: "Kata-kata di postingan ini dijaga seekor anak kucing yang kelaparan. Su
 
 <div id="ink" markdown="1">
 
-_Semua yang tumbuh pernah kecil, dan semua yang kecil pernah kelaparan._
+_Saya suka kucing. Saya belum pernah berhasil memelihara satu pun. Dua kalimat itu tinggal bertahun-tahun di kepala saya tanpa pernah saling menyapa._
 
-Halaman ini dijaga seekor anak kucing. Kata-katanya tersembunyi sampai ia diberi makan: setiap suap membuka beberapa kata sekaligus, dan membuat tubuhnya sedikit lebih besar. Klik makanannya, nanti ia berjalan sendiri ke sana.
+___
 
-Tapi makanan tidak mau menunggu. Ia cuma muncul sebentar, lalu hilang—dan kalau sampai hilang tanpa disentuh, anak kucing ini mati kelaparan. Jadi jangan menunda-nunda.
+### Susu sapi
 
-Sesekali yang muncul bukan makanan, melainkan sebatang cokelat. Manis untuk kita, racun untuk dia. Kalau kamu mengkliknya, ia akan tetap berjalan ke sana, karena ia percaya padamu. Cokelat tidak perlu diambil; biarkan saja ia lewat sendiri.
+SD. Satu anak kucing, satu anak manusia, dan niat baik tanpa ilmu.
 
-Begitulah cara tulisan ini tumbuh: sesuap demi sesuap, dengan sabar, sambil belajar membedakan mana yang memberi hidup dan mana yang cuma kelihatan manis.
+Saya kasih dia susu sapi—susu kotak yang saya sendiri minum. Logikanya masuk akal untuk anak sembilan tahun: kucing suka susu.
 
-Terima kasih sudah menyuapinya sampai kenyang. Sekarang halaman ini sudah utuh, dan kucing kecil itu boleh tidur. Asif, _signing off._ 🐾
+Kucing dewasa tidak bisa mencerna laktosa. Saya baru tahu itu belasan tahun kemudian.
+
+Diare. Lalu kalimat yang menutup perkara:
+
+> _"Kayaknya kamu belum bisa pelihara kucing."_
+
+Keluarga saya tidak salah. Kucing itu diberikan ke orang lain, dan saya dapat pelajaran pertama tentang mencintai sesuatu: niat baik yang tidak diverifikasi adalah cokelat dalam bentuk lain. Manis di tangan yang memberi, racun di perut yang menerima.
+
+Cokelat di game di atas bukan metafora yang saya karang. Saya pernah jadi pemain yang mengkliknya, dan waktu itu tidak ada tap-untuk-lanjut.
+
+### Satu ibu, empat anak
+
+Belasan tahun kemudian. Kuliah, bab terakhir, periode ketika seseorang bisa duduk delapan jam di depan laptop, menghasilkan nol paragraf, dan tetap merasa habis.
+
+Di depan rumah tinggal kucing liar: satu ibu, empat anak. Mereka tidak tahu apa itu tugas akhir, dan itu bagian terbaiknya. Mereka datang setiap hari, minta dielus, tidur di atas sandal, memperlakukan saya sebagai furnitur hangat yang bisa bergerak.
+
+Saya lebih rajin menemui mereka daripada membuka dokumen skripsi. Prioritas itu tidak pernah saya sesali.
+
+Lalu mereka naik ke plafon. Tengah malam, empat kucing kecil menggelar pertunjukan di atas kepala seisi rumah—gratis, tanpa diminta. Tetangga punya pendapat lain soal seni.
+
+Saya tidak pernah jadi pemilik mereka. Selama beberapa bulan saya cuma orang yang mereka datangi. Ternyata itu bentuk hubungan yang lebih jujur: tidak ada yang dimiliki, tidak ada yang dijanjikan, dan mereka tetap datang.
+
+### Optimistic nihilism
+
+Kucing tidak punya rencana lima tahun. Tidak menabung. Tidak peduli IPK, tidak peduli promosi, dan tidak akan datang ke pemakaman saya. Mereka makan, tidur, jatuh dari tempat tinggi dengan gaya, lalu mengulanginya besok tanpa rasa malu.
+
+Tidak ada yang mencatat apa pun. Susu sapi itu tidak bisa saya tarik kembali. Kucing-kucing di plafon itu tidak mengingat nama saya, dan tidak perlu.
+
+Justru karena itu urusannya jadi sederhana: kasih makan yang lapar hari ini. Bukan untuk pahala, bukan untuk cerita. Sepuluh menit dielus, bagi seekor kucing kecil, sudah seluruh dunia—dan dunia itu tidak butuh dicatat siapa pun untuk jadi nyata.
+
+Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing liar: jangan kasih susu sapi. Kasih air. Kasih waktu. Asif, _signing off._ 🐾
 
 </div>
 
@@ -79,11 +109,12 @@ Terima kasih sudah menyuapinya sampai kenyang. Sekarang halaman ini sudah utuh, 
   })(ink);
 
   var TOTAL = words.length;
-  var PER_WORD = 10;          // score needed per revealed word
-  var FOOD_SCORE = 55;        // one bite ≈ 5 words
+  var FOOD_SCORE = 55;        // score per bite
+  var TARGET_BITES = 28;      // a clean run ≈ 28 bites, however long the post gets
+  var PER_WORD = Math.max(1.5, FOOD_SCORE * TARGET_BITES / TOTAL);
   var GROW_STEPS = 10;        // kitten reaches full size after 10 bites
-  var STARVE_COST = 8 * PER_WORD;  // dying of hunger costs 8 words
-  var POISON_COST = 15 * PER_WORD; // chocolate costs more — it was your choice
+  var STARVE_COST = 12 * PER_WORD;  // dying of hunger costs 12 words
+  var POISON_COST = 30 * PER_WORD;  // chocolate costs more — it was your choice
   var FINISH = TOTAL * PER_WORD;
   document.getElementById('kt-total').textContent = TOTAL;
 
