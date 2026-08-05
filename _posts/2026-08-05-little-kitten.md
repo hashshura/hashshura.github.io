@@ -48,9 +48,9 @@ Diare. Lalu kalimat yang menutup perkara:
 
 > _"Kayaknya kamu belum bisa pelihara kucing."_
 
-Keluarga saya tidak salah. Kucing itu diberikan ke orang lain, dan saya dapat pelajaran pertama tentang mencintai sesuatu: niat baik yang tidak diverifikasi adalah cokelat dalam bentuk lain. Manis di tangan yang memberi, racun di perut yang menerima.
+Keluarga saya tidak salah. Kucing itu diberikan ke orang lain, dan saya dapat pelajaran pertama tentang mencintai sesuatu: niat baik yang tidak diverifikasi tetap racun. Manis di tangan yang memberi, racun di perut yang menerima.
 
-Cokelat di game di atas bukan metafora yang saya karang. Saya pernah jadi pemain yang mengkliknya, dan waktu itu tidak ada tap-untuk-lanjut.
+Susu kotak di game di atas bukan metafora yang saya karang. Itu barang bukti. Saya pernah jadi pemain yang mengkliknya, dan waktu itu tidak ada tap-untuk-lanjut.
 
 ### Satu ibu, empat anak
 
@@ -114,7 +114,7 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
   var PER_WORD = Math.max(1.5, FOOD_SCORE * TARGET_BITES / TOTAL);
   var GROW_STEPS = 10;        // kitten reaches full size after 10 bites
   var STARVE_COST = 12 * PER_WORD;  // dying of hunger costs 12 words
-  var POISON_COST = 30 * PER_WORD;  // chocolate costs more — it was your choice
+  var POISON_COST = 30 * PER_WORD;  // cow milk costs more — it was your choice
   var FINISH = TOTAL * PER_WORD;
   document.getElementById('kt-total').textContent = TOTAL;
 
@@ -194,8 +194,8 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
   function foodLife(){ return Math.max(120, 230 - level()*7); }        // frames the food waits
   function spawnGap(){ return Math.max(26, 60 - level()*2.2); }        // frames between spawns
   function catSpeed(){ return Math.min(9, 4.8 + level()*0.22) * Math.max(0.6, Math.min(1, W/620)); }
-  function pPoison(){ return Math.min(0.34, 0.05 + level()*0.032); }   // chocolate instead of food
-  function pExtra(){ return level()>=6 ? Math.min(0.4, 0.16+level()*0.02) : 0; } // chocolate alongside food
+  function pPoison(){ return Math.min(0.34, 0.05 + level()*0.032); }   // milk instead of food
+  function pExtra(){ return level()>=6 ? Math.min(0.4, 0.16+level()*0.02) : 0; } // milk alongside food
 
   function reset(keepScore){
     score = keepScore ? checkpoint : 0;
@@ -240,9 +240,9 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
     return false;
   }
   function spawnRound(){
-    if (Math.random() < pPoison()){ addItem('choco'); return; } // a round with nothing safe: just wait
+    if (Math.random() < pPoison()){ addItem('milk'); return; } // a round with nothing safe: just wait
     addItem('food');
-    if (Math.random() < pExtra()) addItem('choco');
+    if (Math.random() < pExtra()) addItem('milk');
   }
 
   // ---- eating, dying, winning ----
@@ -262,8 +262,8 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
   function poisoned(it){
     items.splice(items.indexOf(it),1);
     flash = 26;
-    for (var i=0;i<26;i++) spark(cat.x, cat.y-catRadius(), '#6b4423');
-    die('choco');
+    for (var i=0;i<26;i++) spark(cat.x, cat.y-catRadius(), '#3b7ea1');
+    die('milk');
   }
 
   function starve(){
@@ -276,15 +276,15 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
     if (scoreMode){
       if ((score|0) > best){ best = score|0; try{ localStorage.setItem(BEST_KEY, String(best)); }catch(e){} }
       state = 'scoredead';
-      deathMsg = cause==='choco' ? '🍫 Cokelat! Kucingnya keracunan' : '😿 Telat! Kucingnya kelaparan';
+      deathMsg = cause==='milk' ? '🥛 Susu sapi! Kucingnya diare' : '😿 Telat! Kucingnya kelaparan';
       msgEl.textContent = deathMsg + ' • Skor: '+(score|0)+' • Terbaik: '+best;
       return;
     }
     var before = Math.floor(score / PER_WORD);
-    score = Math.max(0, score - (cause==='choco' ? POISON_COST : STARVE_COST));
+    score = Math.max(0, score - (cause==='milk' ? POISON_COST : STARVE_COST));
     var lost = before - Math.floor(score / PER_WORD);
     checkpoint = score;
-    deathMsg = cause==='choco' ? '🍫 Cokelat itu racun!' : '😿 Makanannya hilang!';
+    deathMsg = cause==='milk' ? '🥛 Susu sapi itu racun!' : '😿 Makanannya hilang!';
     msgEl.textContent = deathMsg + (lost>0 ? ' −'+lost+' kata' : '');
     state = 'dead';
     reveal(score);
@@ -313,13 +313,13 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
     if (state!=='playing' && state!=='score') return;
     if (!e || e.type==='keydown') return;
     var p = canvasPoint(e);
-    if (cat.locked) return; // already committed to a chocolate — no take-backs
+    if (cat.locked) return; // already committed to the milk — no take-backs
     // did we tap an item? (generous hit radius for fingers)
     for (var i=0;i<items.length;i++){
       var it = items[i];
       if (Math.hypot(p.x-it.x, p.y-it.y) < it.r+16){
         cat.target = it; cat.tx = it.x; cat.ty = it.y;
-        if (it.type==='choco'){ cat.locked = true; msgEl.textContent='🍫 Jangan…!'; }
+        if (it.type==='milk'){ cat.locked = true; msgEl.textContent='🥛 Jangan…!'; }
         return;
       }
     }
@@ -346,7 +346,7 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
       } else { cat.tx = cat.ty = null; }
     }
 
-    // reached the food (or the chocolate)?
+    // reached the food (or the milk)?
     if (cat.target){
       var it = cat.target;
       if (Math.hypot(it.x-cat.x, it.y-cat.y) < catRadius()+it.r*0.8){
@@ -361,7 +361,7 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
         var wasFood = o.type==='food';
         if (cat.target===o){ cat.target=null; cat.locked=false; cat.tx=cat.ty=null; }
         items.splice(i,1);
-        if (wasFood){ starve(); return; }   // chocolate expiring is a relief, not a loss
+        if (wasFood){ starve(); return; }   // milk expiring is a relief, not a loss
         spawnT = Math.min(spawnT, 18);
       }
     }
@@ -446,7 +446,7 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
     ctx.lineWidth = 2.6; ctx.lineCap='butt';
     ctx.strokeStyle = '#e6e6df';
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r+9, 0, Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = o.type==='choco' ? '#6b4423' : (frac<0.3 ? '#c0392b' : '#2e7d32');
+    ctx.strokeStyle = o.type==='milk' ? '#3b7ea1' : (frac<0.3 ? '#c0392b' : '#2e7d32');
     ctx.beginPath(); ctx.arc(o.x, o.y, o.r+9, -Math.PI/2, -Math.PI/2 + Math.PI*2*frac); ctx.stroke();
     ctx.restore();
   }
@@ -455,16 +455,17 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
     var y = o.y + Math.sin(o.bob)*1.6;
     drawTimerRing(o);
     ink2();
-    if (o.type==='choco'){
-      ctx.strokeStyle = '#6b4423'; ctx.fillStyle='#6b4423';
-      ctx.strokeRect(o.x-13, y-9, 26, 18);
+    if (o.type==='milk'){
+      // susu kotak: a gable-top carton with a straw
+      ctx.strokeStyle = '#3b7ea1'; ctx.fillStyle='#3b7ea1';
       ctx.beginPath();
-      ctx.moveTo(o.x-13, y); ctx.lineTo(o.x+13, y);
-      ctx.moveTo(o.x-4.5, y-9); ctx.lineTo(o.x-4.5, y+9);
-      ctx.moveTo(o.x+4.5, y-9); ctx.lineTo(o.x+4.5, y+9);
-      ctx.stroke();
-      ctx.textAlign='center'; ctx.font='bold '+Math.round(H*0.055)+'px sans-serif';
-      ctx.fillText('☠', o.x, y-16); ctx.textAlign='left';
+      ctx.moveTo(o.x-9, y+11); ctx.lineTo(o.x-9, y-5);
+      ctx.lineTo(o.x, y-12); ctx.lineTo(o.x+9, y-5); ctx.lineTo(o.x+9, y+11);
+      ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(o.x-9, y-5); ctx.lineTo(o.x+9, y-5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(o.x+3, y-12); ctx.lineTo(o.x+8, y-21); ctx.stroke();
+      ctx.textAlign='center'; ctx.font='bold '+Math.round(H*0.05)+'px sans-serif';
+      ctx.fillText('☠', o.x-9, y-18); ctx.textAlign='left';
       return;
     }
     if (o.kind===0){ // fish
@@ -474,13 +475,13 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
       ctx.beginPath();
       ctx.moveTo(o.x+8, y); ctx.lineTo(o.x+15, y-6); ctx.lineTo(o.x+15, y+6); ctx.closePath(); ctx.stroke();
       ctx.beginPath(); ctx.arc(o.x-7, y-2, 1.3, 0, 7); ctx.fill();
-    } else if (o.kind===1){ // bowl of milk
+    } else if (o.kind===1){ // drumstick — milk is the poison now, so no bowl here
       ctx.beginPath();
-      ctx.moveTo(o.x-13, y-4); ctx.lineTo(o.x-9, y+8); ctx.lineTo(o.x+9, y+8); ctx.lineTo(o.x+13, y-4);
-      ctx.stroke();
+      ctx.moveTo(o.x+13, y+7); ctx.lineTo(o.x-1, y-3); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(o.x-13, y-4); ctx.quadraticCurveTo(o.x-6, y-1, o.x, y-4);
-      ctx.quadraticCurveTo(o.x+6, y-7, o.x+13, y-4); ctx.stroke();
+      ctx.arc(o.x-5, y-6, 5.5, 0, 7); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(o.x-11, y-1, 5, 0, 7); ctx.stroke();
     } else { // a little pile of kibble
       ctx.beginPath(); ctx.arc(o.x-6, y+3, 4.5, 0, 7); ctx.stroke();
       ctx.beginPath(); ctx.arc(o.x+5, y+3, 4.5, 0, 7); ctx.stroke();
@@ -555,7 +556,7 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
     if (state==='ready'){
       line('🐱 LITTLE KITTEN', H*0.16, true, H*0.4);
       line('Klik makanan → kucingnya makan & tumbuh', H*0.075, false, H*0.56);
-      line('🍫 Jangan pernah klik cokelat!', H*0.075, true, H*0.68, '#6b4423');
+      line('🥛 Jangan pernah klik susu sapi!', H*0.075, true, H*0.68, '#3b7ea1');
       line('▶ Tap untuk mulai', H*0.085, false, H*0.82);
     } else if (state==='dead'){
       line(deathMsg, H*0.13, true, H*0.4, '#c0392b');
