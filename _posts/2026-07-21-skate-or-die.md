@@ -38,7 +38,7 @@ ___
 
 ### Mei 2026
 
-Saya beli longboard. Dua minggu kemudian saya beli surfskate. Tidak ada pencerahan, tidak ada film inspiratif sebelumnya. Saya memutuskan ingin bisa, lalu mulai.
+Saya beli longboard. Sebulan kemudian, saya dapat surfskate gratis. Tidak ada pencerahan, tidak ada film inspiratif sebelumnya. Saya memutuskan ingin bisa, lalu mulai.
 
 Aspal mengajar tanpa kurikulum. Ia tidak peduli jabatanmu, gajimu, atau jumlah tahun yang kamu tulis di CV. Tarifnya lecet di dengkul, dibayar di tempat, tidak menerima transfer.
 
