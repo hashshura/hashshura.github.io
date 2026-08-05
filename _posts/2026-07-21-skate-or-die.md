@@ -109,10 +109,10 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
   var TOTAL = words.length;
   // a flawless run should take ~20s no matter how long the post gets
   var PER_WORD = Math.max(1, 700 / TOTAL);
-  var PENALTY = PER_WORD * 25; // crashing costs you 25 words
-  var RAMP_BONUS = PER_WORD * 12; // nailing a ramp launch grants 12 words
-  var NOTE_CHUNK = 12; // words per popup — one popup per word machine-guns
   var FINISH = TOTAL * PER_WORD;
+  var PENALTY = FINISH * 0.30; // crashing chops 30% of the whole post
+  var RAMP_BONUS = PER_WORD * 6; // nailing a ramp launch grants 6 words
+  var NOTE_CHUNK = 3; // words per popup — one popup per word machine-guns
   document.getElementById('sk-total').textContent = TOTAL;
 
   var BEST_KEY = 'ashura_skate_highscore';

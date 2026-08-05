@@ -113,9 +113,9 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
   var TARGET_BITES = 17;      // a clean run ≈ 17 bites, however long the post gets
   var PER_WORD = Math.max(1.5, FOOD_SCORE * TARGET_BITES / TOTAL);
   var GROW_STEPS = 10;        // kitten reaches full size after 10 bites
-  var STARVE_COST = 12 * PER_WORD;  // dying of hunger costs 12 words
-  var POISON_COST = 30 * PER_WORD;  // cow milk costs more — it was your choice
   var FINISH = TOTAL * PER_WORD;
+  var STARVE_COST = FINISH * 0.30;  // starving chops 30% of the whole post
+  var POISON_COST = FINISH * 0.45;  // milk costs more — it was your choice
   document.getElementById('kt-total').textContent = TOTAL;
 
   var BEST_KEY = 'ashura_kitten_highscore';
