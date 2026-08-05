@@ -8,7 +8,7 @@ teaser: "Saya suka kucing dan tidak pernah berhasil memelihara satu pun — pern
 
 <style>
 #kitten-banner{position:sticky;top:0;z-index:50;background:#fbfbf7;border-bottom:2px solid #222;margin:0 0 8px;box-shadow:0 4px 10px rgba(0,0,0,.06);}
-#kitten-banner canvas{display:block;width:100%;height:auto;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;}
+#kitten-banner canvas{display:block;width:100%;height:auto;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;}
 #kitten-banner .bar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:#555;padding:4px 10px 6px;font-family:inherit;}
 #kitten-banner .bar b{color:#111;}
 #kitten-progress{position:relative;height:4px;background:#e6e6df;}
@@ -301,7 +301,8 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
   // ---- input ----
   function canvasPoint(e){
     var r = cv.getBoundingClientRect();
-    var p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+    var p = (e.touches && e.touches[0]) ||
+            (e.changedTouches && e.changedTouches[0]) || e; // touchend has no .touches
     return { x: (p.clientX - r.left) * (cv.width / r.width),
              y: (p.clientY - r.top) * (cv.height / r.height) };
   }
@@ -584,7 +585,21 @@ Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing
   }
 
   cv.addEventListener('mousedown', tap);
-  cv.addEventListener('touchstart', tap, {passive:false});
+  // On touch, only a real tap feeds the cat. Swiping over the yard scrolls the
+  // page instead — otherwise a scroll could land on the milk and kill the run.
+  var sx=0, sy=0, st=0, slid=false;
+  cv.addEventListener('touchstart', function(e){
+    var p = e.touches[0]; if (!p) return;
+    sx = p.clientX; sy = p.clientY; st = Date.now(); slid = false;
+  }, {passive:true});
+  cv.addEventListener('touchmove', function(e){
+    var p = e.touches[0]; if (!p) return;
+    if (Math.abs(p.clientX-sx) > 10 || Math.abs(p.clientY-sy) > 10) slid = true;
+  }, {passive:true});
+  cv.addEventListener('touchend', function(e){
+    if (slid || Date.now()-st > 600) return;
+    tap(e); // preventDefault inside tap() also cancels the synthetic click
+  });
   window.addEventListener('resize', function(){ sizeCanvas(); });
   // space/enter only advances the non-playing screens; feeding needs a real aim
   window.addEventListener('keydown', function(e){
