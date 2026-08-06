@@ -14,10 +14,13 @@ teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya su
 #skate-progress{position:relative;height:4px;background:#e6e6df;}
 #skate-progress > i{display:block;height:100%;width:0;background:#222;transition:width .2s;}
 
-/* invisible-ink post body — unearned words are also unselectable */
-#ink .w{opacity:0;transition:opacity .5s ease;user-select:none;-webkit-user-select:none;}
-#ink .w.on{opacity:1;user-select:auto;-webkit-user-select:auto;}
-#ink{min-height:40vh;}
+/* invisible-ink post body: an unearned word takes up no space at all, so the
+   page grows as you play instead of sitting under a tall blank slab. */
+#ink .w{display:none;}
+#ink .w.on{display:inline;animation:inkfade .45s ease both;}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+#ink .blk-off{display:none;} /* paragraphs, headings and rules with nothing in them yet */
+#ink{min-height:1rem;}
 </style>
 
 <div id="skate-banner">
@@ -113,6 +116,7 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
             s.className='w';
             real.push(parts[p]); hidden.push(scramble(parts[p]));
             s.textContent = hidden[hidden.length-1];
+            s._wi = words.length; // its index, for the block bookkeeping below
             frag.appendChild(s); words.push(s);
           } else if (parts[p]){
             frag.appendChild(document.createTextNode(parts[p]));
@@ -124,6 +128,42 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
       }
     }
   })(ink);
+
+  // Each top-level block remembers the index of its first word, so it can stay
+  // collapsed until that word is earned. Words are revealed as a prefix, so
+  // "first word < revealed count" is exactly the right test. A block with no
+  // words of its own (a horizontal rule) borrows the threshold of the next block
+  // that has some, and so appears with the section it introduces.
+  var blocks = [];
+  (function(){
+    var kids = [];
+    for (var c=0;c<ink.childNodes.length;c++) if (ink.childNodes[c].nodeType===1) kids.push(ink.childNodes[c]);
+    for (var b=0;b<kids.length;b++){
+      var first = -1;
+      (function scan(node){
+        for (var i=0;i<node.childNodes.length;i++){
+          var n = node.childNodes[i];
+          if (n.nodeType!==1) continue;
+          if (typeof n._wi === 'number'){ if (first<0 || n._wi<first) first = n._wi; }
+          else scan(n);
+        }
+      })(kids[b]);
+      blocks.push({ el:kids[b], at:first, on:null });
+    }
+    var next = Infinity;
+    for (var k=blocks.length-1;k>=0;k--){
+      if (blocks[k].at < 0) blocks[k].at = next; else next = blocks[k].at;
+    }
+  })();
+  function syncBlocks(n){
+    for (var b=0;b<blocks.length;b++){
+      var on = blocks[b].at < n;
+      if (blocks[b].on === on) continue;
+      blocks[b].on = on;
+      if (on) blocks[b].el.classList.remove('blk-off');
+      else blocks[b].el.classList.add('blk-off');
+    }
+  }
 
   var TOTAL = words.length;
   // a flawless run should take ~20s no matter how long the post gets
@@ -149,12 +189,14 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
   function reveal(score){
     var n = Math.min(TOTAL, Math.floor(score / PER_WORD));
     for (var i=0;i<TOTAL;i++) show(i, i<n);
+    syncBlocks(n);
     wordsEl.textContent = n;
     progEl.style.width = Math.min(100,(score/FINISH)*100)+'%';
     return n;
   }
   function revealAll(){
     for (var i=0;i<TOTAL;i++) show(i, true);
+    syncBlocks(TOTAL);
     wordsEl.textContent = TOTAL; progEl.style.width = '100%';
   }
 
