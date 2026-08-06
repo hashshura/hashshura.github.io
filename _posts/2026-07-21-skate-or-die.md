@@ -23,6 +23,13 @@ teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya su
 @keyframes inkfade{from{opacity:0}to{opacity:1}}
 #ink .blk-off{display:none;} /* paragraphs, headings and rules with nothing in them yet */
 #ink{min-height:1rem;}
+/* Escape hatch for anyone who cannot play: off-screen until focused, so Tab
+   reaches it and a screen reader announces it, without tempting a mouse. */
+.ink-skip{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
+.ink-skip:focus{position:static;width:auto;height:auto;display:inline-block;margin:6px 0 2px;padding:6px 10px;font-size:13px;border:1.5px dashed #bbb;border-radius:8px;background:#fbfbf7;color:#222;}
+.ink-tools{margin:4px 0 0;text-align:right;}
+.ink-reset{font:inherit;font-size:11px;color:#aaa;background:none;border:0;padding:2px 4px;cursor:pointer;text-decoration:underline dotted;}
+.ink-reset:hover,.ink-reset:focus{color:#555;}
 </style>
 
 <div id="skate-banner">
@@ -34,6 +41,12 @@ teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya su
     <span>Skor: <b id="sk-score">0</b></span>
   </div>
 </div>
+
+
+<p class="ink-tools">
+  <a href="#ink" class="ink-skip" id="ink-skip">Lewati permainan — tampilkan semua tulisan</a>
+  <button type="button" class="ink-reset" id="ink-reset">⟲ reset progres</button>
+</p>
 
 <div id="ink" markdown="1">
 
@@ -162,6 +175,32 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
   var best = 0;
   try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch(e){}
 
+  // ---- how much of the post this reader has already earned ----
+  // Stored as a word count, not a score, so it survives edits to the prose.
+  var SAVE_KEY = 'ashura_ink_' + ((window.location && window.location.pathname) || 'skate');
+  var savedWords = -1, pendingWords = -1, lastSave = 0;
+  function flushSave(){
+    if (pendingWords < 0 || pendingWords === savedWords) return;
+    savedWords = pendingWords; lastSave = Date.now();
+    try { localStorage.setItem(SAVE_KEY, String(savedWords)); } catch(e){}
+  }
+  function persist(n, force){
+    pendingWords = n; // words land several per second; write at most every 250ms
+    if (force || Date.now() - lastSave >= 250) flushSave();
+  }
+  // whatever the throttle is still holding must land before the reader leaves
+  window.addEventListener('pagehide', flushSave);
+  window.addEventListener('blur', flushSave);
+  document.addEventListener('visibilitychange', flushSave);
+
+  function loadProgress(){
+    var n = 0;
+    try { n = parseInt(localStorage.getItem(SAVE_KEY) || '0', 10) || 0; } catch(e){}
+    return Math.max(0, Math.min(TOTAL, n));
+  }
+
+  var unlocked = false; // set by the skip link or a win: stop re-hiding words
+
   var wordsEl = document.getElementById('sk-words');
   var progEl = document.querySelector('#skate-progress > i');
   function show(i, on){
@@ -170,25 +209,37 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
     if (on) words[i].classList.add('on'); else words[i].classList.remove('on');
   }
   function reveal(score){
+    if (unlocked) return TOTAL; // nothing gets taken back once the post is open
     var n = Math.min(TOTAL, Math.floor(score / PER_WORD));
     for (var i=0;i<TOTAL;i++) show(i, i<n);
     syncBlocks(n);
     wordsEl.textContent = n;
     progEl.style.width = Math.min(100,(score/FINISH)*100)+'%';
+    persist(n);
     return n;
   }
   function revealAll(){
+    unlocked = true;
     for (var i=0;i<TOTAL;i++) show(i, true);
     syncBlocks(TOTAL);
     wordsEl.textContent = TOTAL; progEl.style.width = '100%';
+    persist(TOTAL, true);
   }
 
   // ---- the game (white, doodle style) ----
   var cv = document.getElementById('skate-canvas');
-  var ctx = cv.getContext('2d');
-  var W = cv.width, H = cv.height, GROUND;
+  var ctx = cv && cv.getContext && cv.getContext('2d');
+  var W = cv ? cv.width : 0, H = cv ? cv.height : 0, GROUND;
   var scoreEl = document.getElementById('sk-score');
   var msgEl = document.getElementById('sk-msg');
+
+  // No canvas (blocked, ancient browser) means no way to earn the words, so give
+  // them away rather than leaving an unreadable page behind.
+  if (!ctx){
+    revealAll();
+    msgEl.textContent = 'Gamenya tidak bisa jalan di sini — semua tulisan dibuka.';
+    return;
+  }
 
   function sizeCanvas(){
     var cssW = cv.clientWidth || cv.parentElement.clientWidth || 720;
@@ -280,7 +331,7 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
     reset(true);
     notes.push({text: lost>0 ? ('−'+lost+' kata') : 'Nabrak!', color:'#c0392b', x:px+18, y:py-pr-18, vy:-0.9, life:70, max:70});
     state='playing';
-    reveal(score);
+    reveal(score); flushSave();
   }
 
   function win(){
@@ -447,9 +498,16 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
   }
 
   function loop(){
-    if (state==='playing' || state==='score') update();
-    else { for (var p=particles.length-1;p>=0;p--){ var pt=particles[p]; pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=(pt.conf?0.12:0.08); pt.life--; if(pt.life<=0) particles.splice(p,1);} }
-    draw();
+    try {
+      if (state==='playing' || state==='score') update();
+      else { for (var p=particles.length-1;p>=0;p--){ var pt=particles[p]; pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=(pt.conf?0.12:0.08); pt.life--; if(pt.life<=0) particles.splice(p,1);} }
+      draw();
+    } catch(e){
+      // the game died mid-run; don't hold the post hostage to it
+      revealAll();
+      msgEl.textContent = 'Gamenya rusak di tengah jalan — tulisannya dibuka saja.';
+      return; // stop looping
+    }
     requestAnimationFrame(loop);
   }
 
@@ -469,10 +527,37 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
     jump(); releaseJump();
   });
 
-  sizeCanvas();
-  checkpoint = 0;
-  reset(false);
-  reveal(0);
-  loop();
+  // ---- the two escape hatches ----
+  var skipEl = document.getElementById('ink-skip');
+  if (skipEl) skipEl.addEventListener('click', function(){
+    revealAll();
+    msgEl.textContent = 'Semua tulisan dibuka. Papannya masih boleh dipakai, kok.';
+  });
+  var resetEl = document.getElementById('ink-reset');
+  if (resetEl) resetEl.addEventListener('click', function(){
+    unlocked = false; scoreMode = false; savedWords = -1;
+    try { localStorage.removeItem(SAVE_KEY); } catch(e){}
+    checkpoint = 0; reset(false); state = 'ready';
+    reveal(0);
+    msgEl.textContent = 'Progres direset. Mulai dari nol lagi.';
+  });
+
+  try {
+    sizeCanvas();
+    // pick up where this reader left off
+    var resume = loadProgress();
+    checkpoint = resume * PER_WORD;
+    reset(true);
+    if (resume >= TOTAL && TOTAL > 0){
+      revealAll(); state = 'won';
+    } else {
+      reveal(score);
+      if (resume > 0) msgEl.textContent = 'Lanjut dari ' + resume + ' kata yang sudah terbuka';
+    }
+    loop();
+  } catch(e){
+    revealAll();
+    msgEl.textContent = 'Gamenya gagal dimulai — semua tulisan dibuka.';
+  }
 })();
 </script>
