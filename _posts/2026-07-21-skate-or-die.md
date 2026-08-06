@@ -15,7 +15,9 @@ teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya su
 #skate-progress > i{display:block;height:100%;width:0;background:#222;transition:width .2s;}
 
 /* invisible-ink post body: an unearned word takes up no space at all, so the
-   page grows as you play instead of sitting under a tall blank slab. */
+   page grows as you play instead of sitting under a tall blank slab. The real
+   words stay in the markup so crawlers and readers without JS still get the
+   post; display:none is enough to keep them out of a select-all copy. */
 #ink .w{display:none;}
 #ink .w.on{display:inline;animation:inkfade .45s ease both;}
 @keyframes inkfade{from{opacity:0}to{opacity:1}}
@@ -81,23 +83,7 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
 (function(){
   // ---- reveal setup: wrap every word in the post body into a span ----
   var ink = document.getElementById('ink');
-  var words = [], real = [], hidden = [];
-
-  // A hidden word lives in the DOM as an anagram of itself: the real string only
-  // ever sits in this closure until the word is earned. Select-all, copy, or the
-  // element inspector all get shuffled letters. Same glyphs in the same span, so
-  // swapping the real word in never reflows the paragraph.
-  function scramble(w){
-    if (w.length < 3) return w;
-    var a = w.split(''), out = w;
-    for (var tries=0; tries<10 && out === w; tries++){
-      for (var i=a.length-1;i>0;i--){
-        var j = Math.floor(Math.random()*(i+1)), t = a[i]; a[i] = a[j]; a[j] = t;
-      }
-      out = a.join('');
-    }
-    return out;
-  }
+  var words = [];
 
   (function walk(node){
     // snapshot children first: we mutate the tree as we go, and appending a
@@ -113,9 +99,7 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
         for (var p=0;p<parts.length;p++){
           if (/\S/.test(parts[p])){
             var s = document.createElement('span');
-            s.className='w';
-            real.push(parts[p]); hidden.push(scramble(parts[p]));
-            s.textContent = hidden[hidden.length-1];
+            s.className='w'; s.textContent = parts[p];
             s._wi = words.length; // its index, for the block bookkeeping below
             frag.appendChild(s); words.push(s);
           } else if (parts[p]){
@@ -183,7 +167,6 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
   function show(i, on){
     if (!!words[i]._on === !!on) return; // already in the right state
     words[i]._on = on;
-    words[i].textContent = on ? real[i] : hidden[i];
     if (on) words[i].classList.add('on'); else words[i].classList.remove('on');
   }
   function reveal(score){
