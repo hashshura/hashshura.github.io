@@ -14,9 +14,9 @@ teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya su
 #skate-progress{position:relative;height:4px;background:#e6e6df;}
 #skate-progress > i{display:block;height:100%;width:0;background:#222;transition:width .2s;}
 
-/* invisible-ink post body */
-#ink .w{opacity:0;transition:opacity .5s ease;}
-#ink .w.on{opacity:1;}
+/* invisible-ink post body — unearned words are also unselectable */
+#ink .w{opacity:0;transition:opacity .5s ease;user-select:none;-webkit-user-select:none;}
+#ink .w.on{opacity:1;user-select:auto;-webkit-user-select:auto;}
 #ink{min-height:40vh;}
 </style>
 
@@ -78,7 +78,24 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
 (function(){
   // ---- reveal setup: wrap every word in the post body into a span ----
   var ink = document.getElementById('ink');
-  var words = [];
+  var words = [], real = [], hidden = [];
+
+  // A hidden word lives in the DOM as an anagram of itself: the real string only
+  // ever sits in this closure until the word is earned. Select-all, copy, or the
+  // element inspector all get shuffled letters. Same glyphs in the same span, so
+  // swapping the real word in never reflows the paragraph.
+  function scramble(w){
+    if (w.length < 3) return w;
+    var a = w.split(''), out = w;
+    for (var tries=0; tries<10 && out === w; tries++){
+      for (var i=a.length-1;i>0;i--){
+        var j = Math.floor(Math.random()*(i+1)), t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      out = a.join('');
+    }
+    return out;
+  }
+
   (function walk(node){
     // snapshot children first: we mutate the tree as we go, and appending a
     // DocumentFragment empties it, so a live childNodes loop would re-process
@@ -93,7 +110,9 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
         for (var p=0;p<parts.length;p++){
           if (/\S/.test(parts[p])){
             var s = document.createElement('span');
-            s.className='w'; s.textContent=parts[p];
+            s.className='w';
+            real.push(parts[p]); hidden.push(scramble(parts[p]));
+            s.textContent = hidden[hidden.length-1];
             frag.appendChild(s); words.push(s);
           } else if (parts[p]){
             frag.appendChild(document.createTextNode(parts[p]));
@@ -121,17 +140,21 @@ Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya ja
 
   var wordsEl = document.getElementById('sk-words');
   var progEl = document.querySelector('#skate-progress > i');
+  function show(i, on){
+    if (!!words[i]._on === !!on) return; // already in the right state
+    words[i]._on = on;
+    words[i].textContent = on ? real[i] : hidden[i];
+    if (on) words[i].classList.add('on'); else words[i].classList.remove('on');
+  }
   function reveal(score){
     var n = Math.min(TOTAL, Math.floor(score / PER_WORD));
-    for (var i=0;i<TOTAL;i++){
-      if (i<n) words[i].classList.add('on'); else words[i].classList.remove('on');
-    }
+    for (var i=0;i<TOTAL;i++) show(i, i<n);
     wordsEl.textContent = n;
     progEl.style.width = Math.min(100,(score/FINISH)*100)+'%';
     return n;
   }
   function revealAll(){
-    for (var i=0;i<TOTAL;i++) words[i].classList.add('on');
+    for (var i=0;i<TOTAL;i++) show(i, true);
     wordsEl.textContent = TOTAL; progEl.style.width = '100%';
   }
 
