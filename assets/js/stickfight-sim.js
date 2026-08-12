@@ -51,6 +51,11 @@
   var MAX_HP = 100;
   var FLAIL_ON_HIT = 26;    // ticks of limp ragdoll after being hit
   var SWING_TICKS = 11;     // how long the arm takes to follow through
+  // Specials. Each one spends the weapon: a big swing you get once per pickup.
+  var SPIN_TICKS = 46;      // sword: one and a half turns, hits each enemy once
+  var SPIN_DMG = 17, SPIN_KNOCK = 13;
+  var SPRAY_SHOTS = 8;      // gun: alternating left and right until it is empty
+  var SPRAY_EVERY = 5;
 
   function rnd(seedRef) { // small deterministic PRNG so server and replays agree
     seedRef.s = (seedRef.s * 1664525 + 1013904223) % 4294967296;
@@ -168,8 +173,9 @@
       id: id, name: (name || 'anon').slice(0, 12), color: colorIdx || i,
       hp: MAX_HP, kills: 0, deaths: 0, dead: false, respawn: 0,
       weapon: 'fist', ammo: 0, cd: 0, flail: 0, facing: 1, grounded: false,
-      aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, jumpCool: 0, coyote: 0, lastHitBy: null, lastHitAt: -999,
-      pts: [], input: { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, aim: 0 }
+      aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, jumpCool: 0, coyote: 0,
+      spin: 0, spinAim: 0, spinHits: null, spray: 0, sprayT: 0, sprayDir: 1, lastHitBy: null, lastHitAt: -999,
+      pts: [], input: { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, special: 0, aim: 0 }
     };
     placeBody(p, sp.x, sp.y);
     world.players[id] = p;
@@ -318,7 +324,17 @@
     // animation is the attack rather than a decoration on top of one.
     var aimPow = p.flail > 0 ? 0.15 : 1;
     var ang = p.aim, reach = ARM;
-    if (p.swing > 0) {
+    if (p.spin > 0) {
+      // one and a half turns, starting from where you were aiming
+      var t = 1 - p.spin / SPIN_TICKS;
+      ang = p.spinAim + t * Math.PI * 3;
+      reach = ARM * 1.3;
+      aimPow = 1;
+    } else if (p.spray > 0) {
+      ang = p.sprayDir > 0 ? Math.PI : 0;            // whipping side to side
+      reach = ARM * 1.1;
+      aimPow = 1;
+    } else if (p.swing > 0) {
       var k = 1 - p.swing / SWING_TICKS;             // 0 at the start, 1 at the end
       if (p.swingKind === 'sword') {
         var arc = WEAPONS.sword.arc;
@@ -392,6 +408,72 @@
     p.weapon = 'fist';
     p.ammo = 0;
     p.cd = Math.max(p.cd, 10);
+  }
+
+  // ---- specials --------------------------------------------------------------
+  // Both spend the weapon on use. The sword becomes one enormous spin that will
+  // clear a ledge; the gun empties itself sideways in both directions. You are
+  // bare-handed afterwards either way, which is the price.
+  function startSpecial(world, p) {
+    if (p.dead || p.spin > 0 || p.spray > 0) return;
+    if (p.weapon === 'sword') {
+      p.spin = SPIN_TICKS;
+      p.spinAim = p.aim;
+      p.spinHits = {};
+      p.weapon = 'fist'; p.ammo = 0; p.cd = 0;
+      var chest = p.pts[CHEST];
+      // a small hop into the spin, and permission to leave the ground for it
+      for (var i = 0; i < p.pts.length; i++) p.pts[i].oy += 5.5;
+      p.jumpCool = SPIN_TICKS;
+      world.fx.push({ k: 'spin', x: chest.x, y: chest.y, a: p.aim,
+                      r: Math.round(WEAPONS.sword.reach * 1.25), t: 22, big: true });
+    } else if (p.weapon === 'gun') {
+      p.spray = SPRAY_SHOTS;
+      p.sprayT = 0;
+      p.sprayDir = Math.cos(p.aim) >= 0 ? 1 : -1;
+      p.weapon = 'fist'; p.ammo = 0; p.cd = 0;
+    }
+  }
+
+  function spinTick(world, p) {
+    p.spin--;
+    var chest = p.pts[CHEST];
+    var reach = WEAPONS.sword.reach * 1.25;
+    for (var id in world.players) {
+      var q = world.players[id];
+      if (q === p || q.dead || p.spinHits[id]) continue;
+      for (var i = 0; i < q.pts.length; i++) {
+        var dx = q.pts[i].x - chest.x, dy = q.pts[i].y - chest.y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d > reach) continue;
+        p.spinHits[id] = 1;
+        // thrown outward from the spin, not along an aim direction
+        var nx = dx / (d || 1), ny = dy / (d || 1);
+        hurt(world, q, p, SPIN_DMG, nx * SPIN_KNOCK, ny * SPIN_KNOCK - 3.5, i);
+        break;
+      }
+    }
+    if (p.spin <= 0) p.spinHits = null;
+  }
+
+  function sprayTick(world, p) {
+    p.sprayT--;
+    if (p.sprayT > 0) return;
+    p.sprayT = SPRAY_EVERY;
+    p.spray--;
+    var chest = p.pts[CHEST];
+    var side = p.sprayDir;
+    p.sprayDir = -side;                              // alternate every shot
+    var a = side > 0 ? 0 : Math.PI;
+    a += (rnd(world.seed) - 0.5) * 0.16;             // a little spread
+    var ax = Math.cos(a), ay = Math.sin(a);
+    world.bullets.push({
+      x: chest.x + ax * 20, y: chest.y + ay * 20,
+      vx: ax * BULLET_SPEED, vy: ay * BULLET_SPEED,
+      by: p.id, life: 90
+    });
+    impulse(p, CHEST, -ax * 1.4, -ay * 1.4);
+    world.fx.push({ k: 'jab', x: chest.x + ax * 26, y: chest.y + ay * 26, a: a, r: 0, t: 6 });
   }
 
   function useWeapon(world, p) {
@@ -596,6 +678,10 @@
       if (p.input.fire) useWeapon(world, p);
       if (p.input.discard && !p._dropped) { discardWeapon(p); p._dropped = true; }
       if (!p.input.discard) p._dropped = false;
+      if (p.input.special && !p._special) { startSpecial(world, p); p._special = true; }
+      if (!p.input.special) p._special = false;
+      if (p.spin > 0) spinTick(world, p);
+      if (p.spray > 0) sprayTick(world, p);
 
       // the void
       var hips = p.pts[HIPS];
@@ -665,6 +751,7 @@
 
   return {
     W: W, H: H, DT: DT, MAX_HP: MAX_HP, WEAPONS: WEAPONS, SWING_TICKS: SWING_TICKS,
+    SPIN_TICKS: SPIN_TICKS, SPRAY_SHOTS: SPRAY_SHOTS,
     HEAD: HEAD, CHEST: CHEST, HIPS: HIPS, HANDL: HANDL, HANDR: HANDR,
     FOOTL: FOOTL, FOOTR: FOOTR, BONES: BONES, ARM: ARM,
     createWorld: createWorld, addPlayer: addPlayer, step: step,

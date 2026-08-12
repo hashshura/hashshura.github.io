@@ -56,4 +56,23 @@ ok('weapon bar visible in a match', gear.hidden === false);
 ok('starts bare-handed', /TANGAN/.test(what.textContent), what.textContent);
 ok('shows damage from the sim table', dmg.textContent.indexOf(StickSim.WEAPONS.fist.dmg + ' dmg') === 0, dmg.textContent);
 ok('discard disabled while unarmed', drop.disabled === true);
+
+// specials: offered only while armed, and they spend the weapon
+const special = nodes['sf-special'];
+ok('special disabled bare-handed', special.disabled === true);
+const meId = 'me';
+const w = StickSim;   // give the local player a sword through the sim
+// find the world the client made by driving a pickup: simpler, drive the sim directly
+const world = StickSim.createWorld(1);
+const p = StickSim.addPlayer(world, 'x', 'x');
+for (let i=0;i<90;i++) StickSim.step(world);
+p.weapon = 'sword';
+p.input.special = 1; StickSim.step(world);
+ok('sword special spends the sword', p.weapon === 'fist' && p.spin > 0, 'spin=' + p.spin);
+p.input.special = 0;
+for (let i=0;i<60;i++) StickSim.step(world);      // let the spin finish first
+ok('spin ends by itself', p.spin === 0);
+p.weapon = 'gun'; p.ammo = 8;
+p.input.special = 1; StickSim.step(world);
+ok('gun special spends the gun', p.weapon === 'fist' && p.spray > 0, 'spray=' + p.spray);
 process.exit(0);

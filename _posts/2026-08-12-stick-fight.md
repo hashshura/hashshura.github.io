@@ -72,7 +72,11 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 #sf-pad .dn{grid-area:3/2/4/3;}
 .sf-btn{font:inherit;font-weight:bold;font-size:21px;line-height:1;border:2px solid #222;border-radius:13px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;display:flex;align-items:center;justify-content:center;padding:0;}
 .sf-btn.down{background:#222;color:#fbfbf7;}
-#sf-aimwrap{display:flex;align-items:center;padding-right:6px;}
+#sf-aimwrap{display:flex;flex-direction:column;align-items:center;gap:6px;padding-right:6px;}
+#sf-special{font:inherit;font-size:13px;font-weight:bold;letter-spacing:.03em;width:132px;height:42px;
+  border:2px solid #222;border-radius:11px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;}
+#sf-special:disabled{opacity:.32;cursor:not-allowed;border-color:#bbb;}
+#sf-special.down{background:#222;color:#fbfbf7;}
 #sf-aimpad{width:132px;height:132px;border:2px solid #222;border-radius:50%;background:#fbfbf7;touch-action:none;cursor:grab;}
 #sf-aimpad.down{background:#f1f1e9;cursor:grabbing;}
 
@@ -83,12 +87,14 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 @media (max-width:400px){
   #sf-pad{grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,50px);}
   #sf-aimpad{width:116px;height:116px;}
+  #sf-special{width:116px;height:38px;font-size:12px;}
   .sf-btn{font-size:19px;border-radius:11px;}
 }
 /* Desktop: keyboard is the real control, so the pads step back */
 @media (min-width:760px){
   #sf-pad{grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,48px);}
   #sf-aimpad{width:112px;height:112px;}
+  #sf-special{width:112px;}
   #sf-controls{opacity:.85;}
 }
 </style>
@@ -130,6 +136,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   </div>
   <div id="sf-aimwrap">
     <canvas id="sf-aimpad" width="256" height="256" title="arahkan lalu lepas untuk menyerang"></canvas>
+    <button type="button" id="sf-special" disabled>✷ <span>SPESIAL</span></button>
   </div>
 </div>
 </div>
@@ -137,7 +144,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 <p id="sf-help">
   <b>Keyboard:</b> A/D jalan, W lompat, S merunduk. Panah (atau gerakkan mouse) untuk mengarahkan senjata, <b>spasi</b> atau klik untuk menyerang.<br>
   <b>HP:</b> di layar sentuh, tombol arah di kiri; lingkaran di kanan untuk mengarahkan senjata — <b>lepas jarimu untuk menyerang</b>.<br>
-  <b>Senjata:</b> tombol <b>buang</b> (atau Q) menjatuhkan senjatamu ke lantai di bawahmu. Semua mulai bertangan kosong (7 damage). Pedang (22 + dorongan keras) dan pistol (14, 8 butir) muncul sendiri di peta tiap beberapa detik — ambil dengan menabraknya.<br>
+  <b>Spesial (tombol ✷ atau E):</b> pedang berputar 360° dan melempar semua yang kena; pistol memberondong kiri-kanan sampai habis. Dua-duanya menghabiskan senjatanya.<br>
+  <b>Senjata:</b> tombol <b>buang</b> (atau Q) melepas senjatamu. Semua mulai bertangan kosong (7 damage). Pedang (22 + dorongan keras) dan pistol (14, 8 butir) muncul sendiri di peta tiap beberapa detik — ambil dengan menabraknya.<br>
   <b>Jatuh ke jurang tetap mati</b> — dorongan pedang lebih berbahaya daripada damage-nya. Petanya diacak tiap ronde.
 </p>
 
@@ -183,13 +191,13 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   // ---- input ---------------------------------------------------------------
   var keys = {};
   var mouse = { cx: 0, cy: 0, has: false };
-  var pad = { l: 0, r: 0, jump: 0, duck: 0, aim: null, fire: 0, discard: 0 };   // touch state
+  var pad = { l: 0, r: 0, jump: 0, duck: 0, aim: null, fire: 0, discard: 0, special: 0 };  // touch
   var touches = {};
 
   window.addEventListener('keydown', function (e) {
     if (mode === 'menu') return;
     var k = e.key.toLowerCase();
-    if (['a','d','w','s','q',' ','arrowleft','arrowright','arrowup','arrowdown'].indexOf(k) >= 0) e.preventDefault();
+    if (['a','d','w','s','q','e',' ','arrowleft','arrowright','arrowup','arrowdown'].indexOf(k) >= 0) e.preventDefault();
     keys[k] = 1;
   });
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = 0; });
@@ -332,6 +340,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     if (pad.fire > 0) pad.fire--;
     i.discard = (keys['q'] || pad.discard > 0) ? 1 : 0;
     if (pad.discard > 0) pad.discard--;
+    i.special = (keys['e'] || pad.special > 0) ? 1 : 0;
+    if (pad.special > 0) pad.special--;
     // latch it: the sender samples every 50ms and a tap can be shorter than that
     if (i.fire && typeof pendingFire !== 'undefined') pendingFire = true;
   }
@@ -531,6 +541,23 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
         ctx.arc(f.x, f.y, f.r, f.a - f.arc / 2, f.a + f.arc / 2);
         ctx.stroke();
         ctx.restore();
+      } else if (f.k === 'spin') {
+        // a full ring, opening outward, with a couple of trailing sweep lines
+        ctx.save();
+        var g = 1 - f.t / 22;
+        ctx.globalAlpha = Math.max(0, f.t / 22) * 0.9;
+        ink(3.2, '#222');
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.r * (0.45 + g * 0.75), 0, Math.PI * 2);
+        ctx.stroke();
+        ink(2, '#888');
+        for (var sp = 0; sp < 3; sp++) {
+          var sa = f.a + g * Math.PI * 3 - sp * 0.5;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, f.r * 0.95, sa, sa + 0.45);
+          ctx.stroke();
+        }
+        ctx.restore();
       } else if (f.k === 'jab') {
         // a punch has no slice path: just a short impact burst at the knuckles
         ctx.save();
@@ -618,11 +645,30 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       ' · jeda ' + (wp.cd / 60).toFixed(2) + 's';
     gearAmmo.textContent = wp.ammo ? '· ' + me.ammo + ' butir' : '';
     dropBtn.disabled = me.weapon === 'fist';
+    if (specialBtn) {
+      // the special spends the weapon, so it is only offered while you hold one
+      specialBtn.disabled = me.weapon === 'fist';
+      var label = SPECIAL_NAME[me.weapon] || '✷ SPESIAL';
+      if (specialBtn.textContent !== label) specialBtn.textContent = label;
+    }
   }
   if (dropBtn) {
     dropBtn.addEventListener('click', function () {
       pad.discard = 3;         // a few frames, so one press is one throw
     });
+  }
+  var specialBtn = document.getElementById('sf-special');
+  var SPECIAL_NAME = { sword: '✷ PUTAR', gun: '✷ BERONDONG', fist: '✷ SPESIAL' };
+  if (specialBtn) {
+    specialBtn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (specialBtn.disabled) return;
+      pad.special = 3;
+      specialBtn.classList.add('down');
+    });
+    var offSpecial = function () { specialBtn.classList.remove('down'); };
+    specialBtn.addEventListener('pointerup', offSpecial);
+    specialBtn.addEventListener('pointercancel', offSpecial);
   }
 
   // The score strip. Rebuilt only when the line-up changes and retouched only
@@ -970,7 +1016,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     var i = me.input;
     var fire = (i.fire || pendingFire) ? 1 : 0;
     var bits = (i.l ? 1 : 0) | (i.r ? 2 : 0) | (i.jump ? 4 : 0) | (i.duck ? 8 : 0) |
-               (fire ? 16 : 0) | (i.discard ? 32 : 0);
+               (fire ? 16 : 0) | (i.discard ? 32 : 0) | (i.special ? 64 : 0);
     var aimQ = Math.round(i.aim * 16) / 16;
     var now = Date.now();
     var since = now - lastSentAt;
@@ -979,7 +1025,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     if (!bitsChanged && !aimDue && since < 250) return;
     lastBits = bits; lastAim = aimQ; lastSentAt = now; pendingFire = false;
     ws.send(Wire.encodeInput({
-      l: i.l, r: i.r, jump: i.jump, duck: i.duck, fire: fire, discard: i.discard, aim: aimQ
+      l: i.l, r: i.r, jump: i.jump, duck: i.duck, fire: fire, discard: i.discard,
+      special: i.special, aim: aimQ
     }));
   }, 50);
 

@@ -26,8 +26,8 @@
   var SNAP_KEY = 30;           // force a full keyframe every 30 snapshots (1.5s)
   var WEAPON_ID = { fist: 0, sword: 1, gun: 2 };
   var WEAPON_NAME = ['fist', 'sword', 'gun'];
-  var FX_ID = { slash: 0, hit: 1, die: 2, pick: 3, jab: 4 };
-  var FX_NAME = ['slash', 'hit', 'die', 'pick', 'jab'];
+  var FX_ID = { slash: 0, hit: 1, die: 2, pick: 3, jab: 4, spin: 5 };
+  var FX_NAME = ['slash', 'hit', 'die', 'pick', 'jab', 'spin'];
 
   var T_SNAPSHOT = 1, T_ROSTER = 2, T_INPUT = 3, T_EVENT = 4;
 
@@ -218,7 +218,7 @@
     var buf = new ArrayBuffer(4), dv = new DataView(buf);
     dv.setUint8(0, T_INPUT);
     dv.setUint8(1, (i.l ? 1 : 0) | (i.r ? 2 : 0) | (i.jump ? 4 : 0) |
-                   (i.duck ? 8 : 0) | (i.fire ? 16 : 0) | (i.discard ? 32 : 0));
+                   (i.duck ? 8 : 0) | (i.fire ? 16 : 0) | (i.discard ? 32 : 0) | (i.special ? 64 : 0));
     dv.setInt16(2, Math.round(i.aim * 10000));
     return buf;
   }
@@ -232,6 +232,7 @@
     into.duck = b & 8 ? 1 : 0;
     into.fire = b & 16 ? 1 : 0;
     into.discard = b & 32 ? 1 : 0;
+    into.special = b & 64 ? 1 : 0;
     into.aim = dv.getInt16(2) / 10000;
     return into;
   }
