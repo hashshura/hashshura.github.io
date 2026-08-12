@@ -649,6 +649,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       // the special spends the weapon, so it is only offered while you hold one
       specialBtn.disabled = me.weapon === 'fist';
       var label = SPECIAL_NAME[me.weapon] || '✷ SPESIAL';
+      if (me.weapon === 'gun') label += ' ×' + me.ammo;   // it sprays what is left
       if (specialBtn.textContent !== label) specialBtn.textContent = label;
     }
   }

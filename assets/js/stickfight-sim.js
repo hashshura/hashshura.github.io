@@ -428,7 +428,9 @@
       world.fx.push({ k: 'spin', x: chest.x, y: chest.y, a: p.aim,
                       r: Math.round(WEAPONS.sword.reach * 1.25), t: 22, big: true });
     } else if (p.weapon === 'gun') {
-      p.spray = SPRAY_SHOTS;
+      // spray what is actually in the magazine, not a fixed burst: three rounds
+      // left means three shots
+      p.spray = Math.max(1, Math.min(SPRAY_SHOTS, p.ammo));
       p.sprayT = 0;
       p.sprayDir = Math.cos(p.aim) >= 0 ? 1 : -1;
       p.weapon = 'fist'; p.ammo = 0; p.cd = 0;
