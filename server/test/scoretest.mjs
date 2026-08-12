@@ -69,11 +69,15 @@ const p = StickSim.addPlayer(world, 'x', 'x');
 for (let i=0;i<90;i++) StickSim.step(world);
 p.weapon = 'sword';
 p.input.special = 1; StickSim.step(world);
-ok('sword special spends the sword', p.weapon === 'fist' && p.spin > 0, 'spin=' + p.spin);
+ok('sword special starts a spin, blade still in hand', p.weapon === 'sword' && p.spin > 0,
+   'spin=' + p.spin + ' weapon=' + p.weapon);
 p.input.special = 0;
 for (let i=0;i<60;i++) StickSim.step(world);      // let the spin finish first
-ok('spin ends by itself', p.spin === 0);
+ok('spin ends by itself, sword spent', p.spin === 0 && p.weapon === 'fist');
 p.weapon = 'gun'; p.ammo = 8;
 p.input.special = 1; StickSim.step(world);
-ok('gun special spends the gun', p.weapon === 'fist' && p.spray > 0, 'spray=' + p.spray);
+ok('gun special starts a spray, gun still in hand', p.weapon === 'gun' && p.spray > 0,
+   'spray=' + p.spray + ' weapon=' + p.weapon);
+for (let i=0;i<60;i++) StickSim.step(world);
+ok('and both are spent once the move ends', p.weapon === 'fist' && p.spin === 0 && p.spray === 0);
 process.exit(0);
