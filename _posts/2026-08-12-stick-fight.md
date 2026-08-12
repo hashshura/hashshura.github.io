@@ -51,6 +51,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 </p>
 
 <script src="/assets/js/stickfight-sim.js"></script>
+<script src="/assets/js/stickfight-wire.js"></script>
 <script>
 (function () {
   var S = window.StickSim;
@@ -66,10 +67,11 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   // Point this at the deployed Worker to switch multiplayer on. Empty means the
   // lobby buttons stay disabled and the post is a single-player game.
   var NET_URL = '';
+  try { NET_URL = localStorage.getItem('sf_server') || NET_URL; } catch (e) {}
 
   var INK = '#222', PAPER = '#fbfbf7';
   var TEAM = ['#222', '#c0392b', '#2e7d32', '#3b7ea1', '#e0a800', '#7d3c98'];
-  var KILLS_TO_WIN = 10;
+  var KILLS_TO_WIN = 10;   // the room may override this on join
 
   var world = null, me = null, mode = 'menu', bots = [], winner = null;
   var scale = 1, camY = 0;
@@ -224,6 +226,11 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   }
 
   // ---- drawing -------------------------------------------------------------
+  // in online mode a point is drawn between the last two snapshots
+  var lerpA = 1;
+  function px(q) { return lerpA >= 1 ? q.x : q.ox + (q.x - q.ox) * lerpA; }
+  function py(q) { return lerpA >= 1 ? q.y : q.oy + (q.y - q.oy) * lerpA; }
+
   function ink(w, c) { ctx.strokeStyle = c || INK; ctx.lineWidth = w || 2.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
   function txt(s, x, y, size, color, bold, align) {
     ctx.save();
@@ -281,7 +288,8 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   }
 
   function drawWeapon(p) {
-    var chest = p.pts[S.CHEST], hand = p.pts[S.HANDR];
+    var chest = { x: px(p.pts[S.CHEST]), y: py(p.pts[S.CHEST]) };
+    var hand = { x: px(p.pts[S.HANDR]), y: py(p.pts[S.HANDR]) };
     var a = Math.atan2(hand.y - chest.y, hand.x - chest.x);
     ctx.save();
     ctx.translate(hand.x, hand.y);
@@ -301,18 +309,18 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     var pts = p.pts;
     // a corpse thrown into the void keeps tumbling; stop drawing it once it is
     // past the hatching rather than smearing it down off the canvas
-    if (pts[S.HIPS].y > S.H + 24) return;
+    if (py(pts[S.HIPS]) > S.H + 24) return;
     ctx.save();
     if (p.dead) ctx.globalAlpha = 0.35;
     ink(p.id === (me && me.id) ? 3 : 2.4, col);
     for (var i = 0; i < S.BONES.length; i++) {
       var b = S.BONES[i];
       ctx.beginPath();
-      ctx.moveTo(pts[b[0]].x, pts[b[0]].y);
-      ctx.lineTo(pts[b[1]].x, pts[b[1]].y);
+      ctx.moveTo(px(pts[b[0]]), py(pts[b[0]]));
+      ctx.lineTo(px(pts[b[1]]), py(pts[b[1]]));
       ctx.stroke();
     }
-    var h = pts[S.HEAD];
+    var h = { x: px(pts[S.HEAD]), y: py(pts[S.HEAD]) };
     ctx.beginPath(); ctx.arc(h.x, h.y, 8, 0, 7); ctx.stroke();
     if (p.dead) {            // X eyes, the universal signal
       ink(1.6, col);
@@ -427,6 +435,9 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     }
     ctx.restore();
 
+    if (mode === 'online') {
+      txt('online · ' + (myPing ? myPing + 'ms' : 'tersambung'), S.W - 12, 20, 11, '#999', false, 'right');
+    }
     if (me.dead) {
       txt('mati — hidup lagi dalam ' + Math.ceil(me.respawn / 60) + 's', S.W / 2, 60, 18, '#c0392b', true);
     }
@@ -472,6 +483,13 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
         checkWin();
       }
     }
+    if (mode === 'online' && me) gatherInput(me);   // read controls, server decides
+    // Snapshots land at 20Hz, so draw part-way between the last two rather than
+    // stepping 50ms at a time. decodeSnapshot leaves the previous position in
+    // ox/oy, which is exactly the "from" this needs.
+    lerpA = mode === 'online'
+      ? Math.max(0, Math.min(1, ((now - snapAt) || 0) / 50))
+      : 1;
     try { render(); } catch (e) { /* never let a draw glitch kill the loop */ }
   }
 
@@ -502,22 +520,136 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     if (winner) startSolo();
   });
 
-  // ---- multiplayer seam ----------------------------------------------------
-  // The client half is ready: it talks to a Worker that owns one Durable Object
-  // per room, receives snapshots and sends inputs. Until NET_URL is filled in
-  // there is nothing to talk to, so the buttons say so rather than hanging.
+  // ---- multiplayer ---------------------------------------------------------
+  // The room is authoritative: we send 4-byte inputs and draw the snapshots it
+  // sends back. No local prediction, so a swing lands when the server says it
+  // did — at 20Hz with interpolation that reads as a slight weight, not as lag.
+  var Wire = window.StickWire;
+  var ws = null, roster = [], myId = null, snapAt = 0, myPing = 0;
   var createBtn = document.getElementById('sf-create');
   var joinBtn = document.getElementById('sf-join');
+
+  function api(path, opts) {
+    return fetch(NET_URL + path, opts).then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    });
+  }
+
+  // Latency is measured against the room's own Durable Object, not the edge, so
+  // it reflects the distance to where the fight actually runs.
+  function pingRoom(code) {
+    var t0 = (window.performance || Date).now();
+    return fetch(NET_URL + '/room/' + code + '/ping', { cache: 'no-store' })
+      .then(function () { return Math.round((window.performance || Date).now() - t0); })
+      .catch(function () { return 9999; });
+  }
+
+  function connect(code, password, ping) {
+    var name = (nameEl.value || 'kamu').slice(0, 12);
+    try { localStorage.setItem('sf_name', name); } catch (e) {}
+    note.textContent = 'Menyambung ke ' + code + '…';
+    var url = NET_URL.replace(/^http/, 'ws') + '/room/' + code + '/ws?name=' +
+              encodeURIComponent(name) + '&pw=' + encodeURIComponent(password || '');
+    ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+    myPing = ping || 0;
+
+    ws.onopen = function () {
+      world = S.createWorld(1);
+      world.players = {};
+      bots = []; winner = null; myId = null;
+      mode = 'online';
+      menu.hidden = true;
+      last = 0; acc = 0;
+    };
+    ws.onmessage = function (ev) {
+      if (typeof ev.data === 'string') {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === 'roster') {
+          roster = [];
+          for (var i = 0; i < msg.slots.length; i++) roster[msg.slots[i].slot] = msg.slots[i];
+          if (roster[msg.you]) myId = roster[msg.you].id;
+          KILLS_TO_WIN = msg.killsToWin || KILLS_TO_WIN;
+        }
+        return;
+      }
+      Wire.decodeSnapshot(ev.data, world, roster, S);
+      snapAt = (window.performance || Date).now();
+      me = myId ? world.players[myId] : null;
+      checkWin();
+    };
+    ws.onclose = function () {
+      if (mode !== 'online') return;
+      mode = 'menu'; menu.hidden = false; ws = null;
+      note.textContent = 'Sambungan terputus.';
+    };
+    ws.onerror = function () { note.textContent = 'Gagal menyambung.'; };
+  }
+
+  function refreshRooms() {
+    roomsEl.hidden = false;
+    roomsEl.innerHTML = '<div>mencari room…</div>';
+    api('/lobby/list').then(function (data) {
+      var rooms = (data.rooms || []).slice(0, 12);
+      if (!rooms.length) { roomsEl.innerHTML = '<div>belum ada room. buat satu?</div>'; return; }
+      return Promise.all(rooms.map(function (r) {
+        return pingRoom(r.code).then(function (ms) { r.ping = ms; return r; });
+      })).then(function (list) {
+        list.sort(function (a, b) { return a.ping - b.ping; });   // nearest first
+        roomsEl.innerHTML = '';
+        list.forEach(function (r) {
+          var row = document.createElement('div');
+          row.innerHTML = '<span>' + (r.private ? '🔒 ' : '') +
+            r.code + ' · ' + escapeHtml(r.name) + '</span>' +
+            '<span>' + r.players + '/' + r.max + ' · ' +
+            (r.ping > 3000 ? '—' : r.ping + 'ms') + '</span>';
+          row.addEventListener('click', function () {
+            if (r.players >= r.max) { note.textContent = 'Room itu sudah penuh.'; return; }
+            var pw = r.private ? (window.prompt('Password room ' + r.code) || '') : '';
+            if (r.private && !pw) return;
+            connect(r.code, pw, r.ping);
+          });
+          roomsEl.appendChild(row);
+        });
+      });
+    }).catch(function () {
+      roomsEl.innerHTML = '<div>server tidak menjawab.</div>';
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
   if (!NET_URL) {
     createBtn.disabled = joinBtn.disabled = true;
     note.textContent = 'Room online belum aktif — servernya belum dipasang.';
   } else {
-    createBtn.addEventListener('click', function () { note.textContent = 'Membuat room…'; });
-    joinBtn.addEventListener('click', function () {
-      roomsEl.hidden = false;
-      note.textContent = 'Mencari room…';
+    createBtn.addEventListener('click', function () {
+      var rn = window.prompt('Nama room:', 'ruang ' + (nameEl.value || 'kita'));
+      if (rn === null) return;
+      var pw = window.prompt('Password (kosongkan kalau mau room terbuka):', '') || '';
+      note.textContent = 'Membuat room…';
+      api('/lobby/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: rn, password: pw })
+      }).then(function (res) {
+        if (res.error) { note.textContent = res.error; return; }
+        connect(res.code, pw, 0);
+      }).catch(function () { note.textContent = 'Gagal membuat room.'; });
     });
+    joinBtn.addEventListener('click', refreshRooms);
   }
+
+  // send our input up at 20Hz; the server ignores anything it did not ask for
+  setInterval(function () {
+    if (mode !== 'online' || !ws || ws.readyState !== 1 || !me) return;
+    ws.send(Wire.encodeInput(me.input));
+  }, 50);
 
   window.addEventListener('resize', sizeCanvas);
   sizeCanvas();
