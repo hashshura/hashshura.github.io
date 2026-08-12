@@ -23,6 +23,35 @@ npx wrangler login          # opens a browser once
 npx wrangler deploy
 ```
 
+If `npm install` fails with `EEXIST` / `EACCES` under `~/.npm/_cacache`, the npm
+cache has root-owned files from an earlier `sudo npm install`. No sudo needed —
+just use a different cache:
+
+```sh
+npm install --cache /tmp/npm-cache-sf
+```
+
+(The permanent fix, if you want it, is `sudo chown -R $(whoami) ~/.npm`.)
+
+## Run it locally first
+
+`wrangler dev` runs the real Worker runtime, Durable Objects included, with no
+login and no deploy:
+
+```sh
+npx wrangler dev --port 8787
+node test/livetest.mjs      # drives the running Worker end to end
+```
+
+`livetest.mjs` is the most valuable of the tests, because it is the only one
+talking to actual workerd rather than to stubs. It creates a private room, checks
+the wrong password is refused, connects two real WebSocket clients, and asserts
+snapshots arrive at 20Hz, decode exactly, and that input moves the right
+stickman. Note it uses the `ws` package rather than node's built-in WebSocket:
+the built-in cannot set an `Origin` header, and the Worker's allowlist rejects
+requests without one — which is also worth knowing if you ever write a native
+client.
+
 That prints a URL like `https://stickfight.<subdomain>.workers.dev`. Two ways to
 point the game at it:
 
