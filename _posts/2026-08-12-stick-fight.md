@@ -32,6 +32,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 #sf-controls{display:none;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 14px;user-select:none;-webkit-user-select:none;}
 #sf-controls.on{display:flex;}
 #sf-pad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,54px);gap:5px;}
+#sf-pad .sf-btn{pointer-events:none;}   /* the pad itself handles the touch */
 #sf-pad .up{grid-area:1/2/2/3;}
 #sf-pad .lf{grid-area:2/1/3/2;}
 #sf-pad .rt{grid-area:2/3/3/4;}
@@ -158,23 +159,50 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   var apCtx = ap && ap.getContext ? ap.getContext('2d') : null;
   var padDrag = null;
 
-  function hold(el, key) {
-    function down(e) {
-      e.preventDefault();
-      pad[key] = 1;
-      el.classList.add('down');
-      if (el.setPointerCapture && e.pointerId != null) {
-        try { el.setPointerCapture(e.pointerId); } catch (err) {}
-      }
+  // The d-pad is one continuous surface, not four separate buttons. Your thumb
+  // lands on ◀ and slides up to ▲ and the direction follows it, corners give you
+  // both at once. As four independent buttons, sliding off one left you pressing
+  // nothing at all, which is what made the movement feel dead.
+  var padEl = document.getElementById('sf-pad');
+  var padBtns = {};
+  if (padEl && padEl.querySelectorAll) {
+    var all = padEl.querySelectorAll('.sf-btn');
+    for (var bi = 0; bi < all.length; bi++) {
+      padBtns[all[bi].getAttribute('data-k')] = all[bi];
     }
-    function up() { pad[key] = 0; el.classList.remove('down'); }
-    el.addEventListener('pointerdown', down);
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
-    el.addEventListener('pointerleave', up);
+    var mark = function () {
+      for (var k in padBtns) {
+        if (pad[k]) padBtns[k].classList.add('down');
+        else padBtns[k].classList.remove('down');
+      }
+    };
+    var setDir = function (e) {
+      var r = padEl.getBoundingClientRect();
+      var dx = (e.clientX - r.left) - r.width / 2;
+      var dy = (e.clientY - r.top) - r.height / 2;
+      var dead = Math.min(r.width, r.height) * 0.15;
+      pad.l = dx < -dead ? 1 : 0;
+      pad.r = dx > dead ? 1 : 0;
+      pad.jump = dy < -dead ? 1 : 0;
+      pad.duck = dy > dead ? 1 : 0;
+      mark();
+    };
+    var clearDir = function () { pad.l = pad.r = pad.jump = pad.duck = 0; mark(); };
+    padEl.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      if (padEl.setPointerCapture && e.pointerId != null) {
+        try { padEl.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+      setDir(e);
+    });
+    padEl.addEventListener('pointermove', function (e) {
+      if (e.pointerType === 'mouse' && !e.buttons) return;   // only while held down
+      setDir(e);
+    });
+    padEl.addEventListener('pointerup', clearDir);
+    padEl.addEventListener('pointercancel', clearDir);
+    padEl.addEventListener('lostpointercapture', clearDir);
   }
-  var btns = controls ? controls.querySelectorAll('.sf-btn[data-k]') : [];
-  for (var bi = 0; bi < btns.length; bi++) hold(btns[bi], btns[bi].getAttribute('data-k'));
 
   // The aim pad: drag to point the weapon, and lifting your finger attacks in
   // whatever direction you left it pointing. A plain tap attacks along the

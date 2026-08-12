@@ -121,6 +121,9 @@ node servertest.mjs   # Room + Lobby with WebSocketPair/Response stubbed:
                       # six-player cap, heartbeat, snapshot size, position match
 node onlinetest.mjs   # the actual post script against an in-process Durable
                       # Object: create room, roster, decode, draw, inputs back
+node padtest.mjs      # the touch d-pad: a thumb sliding from ◀ to ▲ has to hand
+                      # the direction over, and corners give both at once
+node prunetest.mjs    # an emptied room ages off the lobby list
 ```
 
 `shim.cjs` is a Canvas2D-to-SVG shim so the drawing can be checked without a

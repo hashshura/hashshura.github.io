@@ -163,11 +163,14 @@
     p.grounded = false;
     for (var i = 0; i < p.pts.length; i++) {
       var q = p.pts[i];
-      // On a living body only the feet and hips are solid. Letting a hand or the
-      // head land on a platform means any jump that brushes a ledge leaves you
-      // dangling from an arm, which is reproducible and looks broken. A corpse is
-      // solid all over, so it still tumbles and settles on whatever it lands on.
-      var solid = p.dead || i === FOOTL || i === FOOTR || i === HIPS;
+      // A living body stands on its feet and nothing else.
+      //
+      // Anything else that can land is a thing that can catch: a hand on a ledge
+      // left people hanging in mid-air, and the hips catching a deck lip wedged
+      // the stomach on the edge with the legs dangling underneath — 167 of 576
+      // swept jump paths ended that way. A corpse stays solid all over so it
+      // still tumbles and settles.
+      var solid = p.dead || i === FOOTL || i === FOOTR;
       var planted = false;
       if (solid) {
         for (var j = 0; j < world.platforms.length; j++) {
@@ -177,8 +180,12 @@
           // by already standing on this platform and having sagged a few px into
           // it. Without that second case a planted foot that drifts down by more
           // than a pixel is lost for good and the body falls through the world.
+          // Downward crossings only, so a deck can always be jumped up through
+          // from below and landed on from above. The resting window is kept
+          // thinner than the slab, or a foot that has already passed underneath
+          // gets teleported back up onto it.
           var crossed = q.oy <= pl.y + 1 && q.y >= pl.y;
-          var resting = q.g === pl.y && q.y >= pl.y - 2 && q.y < pl.y + 10;
+          var resting = q.g === pl.y && q.y >= pl.y - 2 && q.y < pl.y + 5;
           if (crossed || resting) {
             q.y = pl.y;
             var vx = q.x - q.ox;
@@ -186,8 +193,6 @@
             q.ox = q.x - vx * 0.72;        // friction
             q.g = pl.y;
             planted = true;
-            // hips count as footing too, or landing rump-first on a ledge leaves
-            // you sitting there unable to jump
             p.grounded = true;
           }
         }
