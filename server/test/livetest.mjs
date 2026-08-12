@@ -1,6 +1,6 @@
 // Talk to the actual Worker running in workerd via `wrangler dev`.
-const BASE = 'http://127.0.0.1:8787';
-const WSB = 'ws://127.0.0.1:8787';
+const BASE = process.env.SF_BASE || 'http://127.0.0.1:8787';
+const WSB = BASE.replace(/^http/, 'ws');
 const O = { 'Origin': 'https://ashura.id', 'Content-Type': 'application/json' };
 import WebSocketNode from 'ws';   // node's built-in WebSocket cannot set Origin
 const S = (await import('../../assets/js/stickfight-sim.js')).default;

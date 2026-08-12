@@ -64,9 +64,10 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   var ctx = cv.getContext('2d');
   if (!ctx) { menu.innerHTML = '<p>Canvas tidak tersedia.</p>'; return; }
 
-  // Point this at the deployed Worker to switch multiplayer on. Empty means the
-  // lobby buttons stay disabled and the post is a single-player game.
-  var NET_URL = '';
+  // The room server: a Worker with one Durable Object per room code.
+  // See server/ in the repo. Set sf_server in localStorage to point at a local
+  // `wrangler dev` instead, without editing the post.
+  var NET_URL = 'https://stickfight.hashshura.workers.dev';
   try { NET_URL = localStorage.getItem('sf_server') || NET_URL; } catch (e) {}
 
   var INK = '#222', PAPER = '#fbfbf7';
@@ -537,7 +538,11 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   }
 
   // Latency is measured against the room's own Durable Object, not the edge, so
-  // it reflects the distance to where the fight actually runs.
+  // it reflects the distance to where the fight actually runs. This relies on the
+  // connection to the origin already being warm — refreshRooms() fetches the room
+  // list first, and these pings then share that HTTP/2 connection. Measured cold,
+  // the first number would include a TLS handshake (~450ms from Jakarta) instead
+  // of the ~25ms round trip that actually matters.
   function pingRoom(code) {
     var t0 = (window.performance || Date).now();
     return fetch(NET_URL + '/room/' + code + '/ping', { cache: 'no-store' })
