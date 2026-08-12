@@ -77,7 +77,7 @@ function makeCtx() {
 
 function el(tag) {
   const e = {
-    tagName: tag, nodeType: 1, className: '', textContent: '', innerHTML: '', style: {},
+    tagName: tag, nodeType: 1, className: '', textContent: '', style: {},
     childNodes: [], hidden: false, disabled: false, value: '',
     clientWidth: 960, width: 960, height: 540,
     classList: { s:new Set(), add(c){this.s.add(c);}, remove(c){this.s.delete(c);}, contains(c){return this.s.has(c);} },
@@ -86,6 +86,8 @@ function el(tag) {
     getAttribute(k){ return this['attr_'+k] ?? null; },
     addEventListener(t,fn){ if (!listeners.has(this)) listeners.set(this,{}); (listeners.get(this)[t] ||= []).push(fn); },
     getBoundingClientRect(){ return { left:0, top:0, width:this.width, height:this.height }; },
+    get innerHTML(){ return this._html || ''; },
+    set innerHTML(v){ this._html = v; if (v === '') this.childNodes.length = 0; },
     querySelector(){ return el('i'); },
     querySelectorAll(){ return []; }
   };

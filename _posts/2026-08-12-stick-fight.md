@@ -12,12 +12,21 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
    height is left after the controls, and the controls never leave the screen. */
 #sf-stage{position:relative;left:50%;transform:translateX(-50%);width:calc(100vw - 8px);max-width:1100px;margin:0 0 6px;}
 @supports (height: 100dvh) {
-  #sf-stage{width:min(calc(100vw - 8px), calc((100dvh - 230px) * 1.777), 1100px);}
+  #sf-stage{width:min(calc(100vw - 8px), calc((100dvh - 268px) * 1.777), 1100px);}
 }
 @supports not (height: 100dvh) {
-  #sf-stage{width:min(calc(100vw - 8px), calc((100vh - 230px) * 1.777), 1100px);}
+  #sf-stage{width:min(calc(100vw - 8px), calc((100vh - 268px) * 1.777), 1100px);}
 }
 #sf-wrap{position:relative;}
+/* The scoreboard lives above the arena, not on top of it: overlaid in a corner it
+   covered the ledge people were fighting on. */
+#sf-score{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px;margin:0 2px 5px;font-size:13px;line-height:1;}
+#sf-score[hidden]{display:none;}
+#sf-score .who{display:flex;align-items:center;gap:5px;padding:5px 8px;border:1.5px solid #ddd;border-radius:8px;background:#fbfbf7;}
+#sf-score .who.self{border-color:#222;font-weight:bold;}
+#sf-score .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+#sf-score .k{font-weight:bold;font-variant-numeric:tabular-nums;}
+#sf-score .goal{margin-left:auto;color:#999;font-size:11px;}
 #sf-canvas{display:block;width:100%;height:auto;background:#fbfbf7;border:2px solid #222;border-radius:8px;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;}
 #sf-wrap.with-menu{min-height:min(74vh,470px);}
 
@@ -72,6 +81,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 </style>
 
 <div id="sf-stage">
+<div id="sf-score" hidden></div>
 <div id="sf-wrap" class="with-menu">
   <canvas id="sf-canvas" width="960" height="540"></canvas>
   <button id="sf-exit" hidden title="kembali ke menu (Esc)">✕ menu</button>
@@ -546,44 +556,14 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   // Drawn in canvas pixels, not arena units. Scaling it with the arena meant a
   // 390px phone rendered 11px text at about 4px — the scoreboard was unreadable
   // exactly where the screen was smallest.
+  // Only things that must sit over the arena are drawn on it now: the respawn
+  // countdown and the win banner. The running score is DOM, above the canvas.
   function drawHud(w) {
     var cw = cv.width, ch = cv.height;
-    var u = Math.max(13, Math.min(20, cw / 28));      // base text size
-    var ids = Object.keys(w.players);
-    ids.sort(function (a, b) { return w.players[b].kills - w.players[a].kills; });
-
-    var rowH = u * 1.45;
-    var boxW = Math.max(150, Math.min(cw * 0.42, u * 11));
-    var boxH = rowH * ids.length + u * 2.1;
-    ctx.save();
-    ctx.globalAlpha = 0.86;
-    ctx.fillStyle = PAPER;
-    ctx.fillRect(0, 0, boxW, boxH);
-    ctx.globalAlpha = 1;
-    ink(1.2, '#ddd');
-    ctx.beginPath();
-    ctx.moveTo(boxW, 0); ctx.lineTo(boxW, boxH); ctx.lineTo(0, boxH);
-    ctx.stroke();
-    ctx.restore();
-
-    for (var i = 0; i < ids.length; i++) {
-      var p = w.players[ids[i]];
-      var y = u * 1.3 + i * rowH;
-      ink(2, TEAM[p.color % TEAM.length]);
-      ctx.beginPath(); ctx.arc(u * 0.75, y - u * 0.32, u * 0.32, 0, 7); ctx.stroke();
-      txt(p.name, u * 1.35, y, u * 0.92, '#333', p.id === (me && me.id), 'left');
-      txt(String(p.kills), boxW - u * 0.6, y, u * 0.95, '#111', true, 'right');
-    }
-    txt('sampai ' + KILLS_TO_WIN + ' kill', u * 0.75, boxH - u * 0.5, u * 0.68, '#999', false, 'left');
-
-    if (mode === 'online') {
-      txt('online · ' + (myPing ? myPing + 'ms' : 'tersambung'), cw - u * 0.7, u * 1.2,
-          u * 0.7, '#999', false, 'right');
-    }
-    if (!me) return;
-    if (me.dead) {
+    var u = Math.max(13, Math.min(20, cw / 28));
+    if (me && me.dead) {
       txt('mati — hidup lagi dalam ' + Math.ceil(me.respawn / 60) + 's',
-          cw / 2, ch * 0.14, u * 1.4, '#c0392b', true);
+          cw / 2, ch * 0.13, u * 1.4, '#c0392b', true);
     }
     if (winner) {
       ctx.save();
@@ -592,6 +572,52 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       txt(winner + ' menang', cw / 2, ch / 2 + u * 0.2, u * 2.4, INK, true);
       txt('klik untuk main lagi', cw / 2, ch / 2 + u * 2.4, u, '#666');
       ctx.restore();
+    }
+  }
+
+  // The score strip. Rebuilt only when the line-up changes and retouched only
+  // when a number changes, so it is not doing DOM work sixty times a second.
+  var scoreEl = document.getElementById('sf-score');
+  var scoreRows = {}, scoreKey = '', scoreAt = 0;
+  function drawScore(w) {
+    if (!scoreEl) return;
+    var now = Date.now();
+    if (now - scoreAt < 120) return;
+    scoreAt = now;
+    var ids = Object.keys(w.players);
+    ids.sort(function (a, b) { return w.players[b].kills - w.players[a].kills ||
+                                      (a < b ? -1 : 1); });
+    var key = ids.map(function (id) { return id + ':' + w.players[id].name; }).join('|');
+    if (key !== scoreKey) {
+      scoreKey = key;
+      scoreEl.innerHTML = '';
+      scoreRows = {};
+      for (var i = 0; i < ids.length; i++) {
+        var p = w.players[ids[i]];
+        var row = document.createElement('span');
+        row.className = 'who' + (p.id === (me && me.id) ? ' self' : '');
+        var dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = TEAM[p.color % TEAM.length];
+        var nm = document.createElement('span');
+        nm.textContent = p.name;
+        var kills = document.createElement('span');
+        kills.className = 'k';
+        row.appendChild(dot); row.appendChild(nm); row.appendChild(kills);
+        scoreEl.appendChild(row);
+        scoreRows[p.id] = { kills: kills, last: -1 };
+      }
+      var goal = document.createElement('span');
+      goal.className = 'goal';
+      goal.textContent = 'sampai ' + KILLS_TO_WIN + ' kill' +
+        (mode === 'online' ? (myPing ? ' · ' + myPing + 'ms' : ' · online') : '');
+      scoreEl.appendChild(goal);
+    }
+    for (var k = 0; k < ids.length; k++) {
+      var q = w.players[ids[k]], cell = scoreRows[q.id];
+      if (!cell) continue;
+      var val = q.kills + (q.dead ? ' ☠' : '');
+      if (val !== cell.last) { cell.kills.textContent = val; cell.last = val; }
     }
   }
 
@@ -646,6 +672,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawHud(world);
     drawAimPad();
+    drawScore(world);
   }
 
   // ---- game loop -----------------------------------------------------------
@@ -705,12 +732,14 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     wrap.classList.remove('with-menu');
     controls.classList.add('on');
     if (exitBtn) exitBtn.hidden = false;
+    if (scoreEl) { scoreEl.hidden = false; scoreKey = ''; }
   }
   function showMenu() {
     menu.hidden = false;
     wrap.classList.add('with-menu');
     controls.classList.remove('on');
     if (exitBtn) exitBtn.hidden = true;
+    if (scoreEl) scoreEl.hidden = true;
   }
   function leaveMatch() {
     if (mode === 'menu') return;
