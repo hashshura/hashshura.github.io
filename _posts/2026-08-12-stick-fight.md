@@ -12,10 +12,10 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
    height is left after the controls, and the controls never leave the screen. */
 #sf-stage{position:relative;left:50%;transform:translateX(-50%);width:calc(100vw - 8px);max-width:1100px;margin:0 0 6px;}
 @supports (height: 100dvh) {
-  #sf-stage{width:min(calc(100vw - 8px), calc((100dvh - 300px) * 1.777), 1100px);}
+  #sf-stage{width:min(calc(100vw - 8px), calc((100dvh - 336px) * 1.777), 1100px);}
 }
 @supports not (height: 100dvh) {
-  #sf-stage{width:min(calc(100vw - 8px), calc((100vh - 300px) * 1.777), 1100px);}
+  #sf-stage{width:min(calc(100vw - 8px), calc((100vh - 336px) * 1.777), 1100px);}
 }
 #sf-wrap{position:relative;}
 /* Weapon bar: one fixed-height line above the arena. It reports what you are
@@ -31,15 +31,21 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   border:1.5px solid #222;border-radius:8px;background:#fbfbf7;color:#222;cursor:pointer;flex:0 0 auto;}
 #sf-drop:disabled{opacity:.35;cursor:not-allowed;border-color:#bbb;}
 
-/* Scoreboard sits below everything, where wrapping to a second line moves
-   nothing that matters. */
-#sf-score{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px;margin:2px 2px 10px;font-size:13px;line-height:1;}
+/* Fixed height, and it never wraps: a strip above the arena that grows from one
+   line to two shoves the map (and the controls) down mid-fight. Too many
+   fighters to fit just scroll sideways. */
+#sf-score{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;height:34px;
+  margin:0 2px 4px;padding:0 1px;font-size:13px;line-height:1;
+  overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+#sf-score::-webkit-scrollbar{display:none;}
 #sf-score[hidden]{display:none;}
-#sf-score .who{display:flex;align-items:center;gap:5px;padding:5px 8px;border:1.5px solid #ddd;border-radius:8px;background:#fbfbf7;}
+#sf-score .who{display:flex;align-items:center;gap:5px;flex:0 0 auto;padding:6px 8px;
+  border:1.5px solid #ddd;border-radius:8px;background:#fbfbf7;white-space:nowrap;}
+#sf-score .nm{max-width:8ch;overflow:hidden;text-overflow:ellipsis;}
 #sf-score .who.self{border-color:#222;font-weight:bold;}
 #sf-score .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
 #sf-score .k{font-weight:bold;font-variant-numeric:tabular-nums;}
-#sf-score .goal{margin-left:auto;color:#999;font-size:11px;}
+#sf-score .goal{margin-left:auto;flex:0 0 auto;color:#999;font-size:11px;white-space:nowrap;padding-right:2px;}
 #sf-canvas{display:block;width:100%;height:auto;background:#fbfbf7;border:2px solid #222;border-radius:8px;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;}
 #sf-wrap.with-menu{min-height:min(74vh,470px);}
 
@@ -100,6 +106,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 </style>
 
 <div id="sf-stage">
+<div id="sf-score" hidden></div>
 <div id="sf-gear" hidden>
   <span id="sf-gear-what">✊ TANGAN</span>
   <span id="sf-gear-dmg"></span>
@@ -124,8 +131,6 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     <div id="sf-rooms" hidden></div>
   </div>
 </div>
-
-<div id="sf-score" hidden></div>
 
 <div id="sf-controls">
   <div id="sf-pad">
@@ -699,6 +704,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
         dot.className = 'dot';
         dot.style.background = TEAM[p.color % TEAM.length];
         var nm = document.createElement('span');
+        nm.className = 'nm';
         nm.textContent = p.name;
         var kills = document.createElement('span');
         kills.className = 'k';
