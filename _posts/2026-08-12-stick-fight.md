@@ -10,6 +10,9 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 #sf-wrap{position:relative;max-width:100%;margin:0 0 10px;}
 #sf-canvas{display:block;width:100%;height:auto;background:#fbfbf7;border:2px solid #222;border-radius:6px;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;}
 #sf-menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(251,251,247,.94);border-radius:6px;font-family:inherit;}
+/* the display:flex above outranks the browser's own [hidden]{display:none}, so
+   setting menu.hidden would otherwise leave the overlay sitting on the game */
+#sf-menu[hidden]{display:none;}
 #sf-menu h2{margin:0;font-size:26px;letter-spacing:.02em;}
 #sf-menu p{margin:0;font-size:13px;color:#777;text-align:center;max-width:34em;padding:0 14px;}
 #sf-menu .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:0 10px;}
