@@ -544,17 +544,19 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       } else if (f.k === 'spin') {
         // a full ring, opening outward, with a couple of trailing sweep lines
         ctx.save();
-        var g = 1 - f.t / 22;
-        ctx.globalAlpha = Math.max(0, f.t / 22) * 0.9;
+        // clamped: ctx.arc throws on a negative radius, and the effect's timer is
+        // set by the simulation, which may outlive the number assumed here
+        var g = Math.max(0, Math.min(1, 1 - f.t / 26));
+        ctx.globalAlpha = Math.max(0, Math.min(1, f.t / 26)) * 0.9;
         ink(3.2, '#222');
         ctx.beginPath();
-        ctx.arc(f.x, f.y, f.r * (0.45 + g * 0.75), 0, Math.PI * 2);
+        ctx.arc(f.x, f.y, Math.max(2, f.r * (0.45 + g * 0.75)), 0, Math.PI * 2);
         ctx.stroke();
         ink(2, '#888');
         for (var sp = 0; sp < 3; sp++) {
           var sa = f.a + g * Math.PI * 3 - sp * 0.5;
           ctx.beginPath();
-          ctx.arc(f.x, f.y, f.r * 0.95, sa, sa + 0.45);
+          ctx.arc(f.x, f.y, Math.max(2, f.r * 0.95), sa, sa + 0.45);
           ctx.stroke();
         }
         ctx.restore();

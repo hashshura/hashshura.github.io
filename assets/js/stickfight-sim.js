@@ -410,6 +410,9 @@
     p.cd = Math.max(p.cd, 10);
   }
 
+  // A special is running, so the weapon is committed even though it is still drawn
+  function inSpecial(p) { return p.spin > 0 || p.spray > 0; }
+
   // ---- specials --------------------------------------------------------------
   // Both spend the weapon on use. The sword becomes one enormous spin that will
   // clear a ledge; the gun empties itself sideways in both directions. You are
@@ -420,20 +423,20 @@
       p.spin = SPIN_TICKS;
       p.spinAim = p.aim;
       p.spinHits = {};
-      p.weapon = 'fist'; p.ammo = 0; p.cd = 0;
+      p.cd = SPIN_TICKS;        // no normal swings mid-spin; the weapon goes at the end
       var chest = p.pts[CHEST];
       // a small hop into the spin, and permission to leave the ground for it
       for (var i = 0; i < p.pts.length; i++) p.pts[i].oy += 5.5;
       p.jumpCool = SPIN_TICKS;
       world.fx.push({ k: 'spin', x: chest.x, y: chest.y, a: p.aim,
-                      r: Math.round(WEAPONS.sword.reach * 1.25), t: 22, big: true });
+                      r: Math.round(WEAPONS.sword.reach * 1.25), t: 26, big: true });
     } else if (p.weapon === 'gun') {
       // spray what is actually in the magazine, not a fixed burst: three rounds
       // left means three shots
       p.spray = Math.max(1, Math.min(SPRAY_SHOTS, p.ammo));
       p.sprayT = 0;
       p.sprayDir = Math.cos(p.aim) >= 0 ? 1 : -1;
-      p.weapon = 'fist'; p.ammo = 0; p.cd = 0;
+      p.cd = p.spray * SPRAY_EVERY + 6;
     }
   }
 
@@ -455,7 +458,11 @@
         break;
       }
     }
-    if (p.spin <= 0) p.spinHits = null;
+    if (p.spin <= 0) {
+      p.spinHits = null;
+      discardWeapon(p);        // the swing is over and so is the sword
+      p.cd = 12;
+    }
   }
 
   function sprayTick(world, p) {
@@ -475,7 +482,9 @@
       by: p.id, life: 90
     });
     impulse(p, CHEST, -ax * 1.4, -ay * 1.4);
+    if (p.ammo > 0) p.ammo--;                    // the bar counts down as it empties
     world.fx.push({ k: 'jab', x: chest.x + ax * 26, y: chest.y + ay * 26, a: a, r: 0, t: 6 });
+    if (p.spray <= 0) { discardWeapon(p); p.cd = 12; }
   }
 
   function useWeapon(world, p) {
@@ -678,7 +687,7 @@
       else if (p.coyote > 0) { p.coyote--; p.grounded = true; }
 
       if (p.input.fire) useWeapon(world, p);
-      if (p.input.discard && !p._dropped) { discardWeapon(p); p._dropped = true; }
+      if (p.input.discard && !p._dropped && !inSpecial(p)) { discardWeapon(p); p._dropped = true; }
       if (!p.input.discard) p._dropped = false;
       if (p.input.special && !p._special) { startSpecial(world, p); p._special = true; }
       if (!p.input.special) p._special = false;

@@ -27,7 +27,8 @@ const score = nodes['sf-score'];
 score.hidden = true;      // the markup carries the hidden attribute; the stub does not parse it
 
 ((listeners.get(nodes['sf-solo'])||{}).click||[]).forEach(fn=>fn({}));
-const frame = () => { const f = raf; raf = []; f.forEach(fn=>fn(Date.now())); };
+let clock = 1000;
+const frame = () => { clock += 16.7; const f = raf; raf = []; f.forEach(fn => fn(clock)); };
 for (let i=0;i<10;i++) frame();
 await new Promise(r => setTimeout(r, 140));
 frame();
