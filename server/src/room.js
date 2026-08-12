@@ -35,6 +35,7 @@ export class Room {
     this.lastBeat = 0;
     this.emptyAt = Date.now();
     this.meta = null;                  // {code,name,hash,salt,colo}
+    this.mapSeed = 0;
     this.nextId = 1;
   }
 
@@ -99,7 +100,10 @@ export class Room {
     const slot = this.slots.indexOf(null);
     if (slot < 0) { ws.close(1013, 'full'); return; }
 
-    if (!this.world) this.world = S.createWorld(Date.now() % 100000);
+    if (!this.world) {
+      this.mapSeed = Date.now() % 100000;      // one arena per room, per session
+      this.world = S.createWorld(this.mapSeed);
+    }
     const id = 'p' + (this.nextId++);
     this.slots[slot] = id;
     S.addPlayer(this.world, id, name, slot);
@@ -141,7 +145,7 @@ export class Room {
     for (const [, c] of this.conns) slots.push({ slot: c.slot, id: c.id, name: c.name, color: c.color });
     for (const [ws, c] of this.conns) {
       this.send(ws, JSON.stringify({
-        type: 'roster', you: c.slot, slots,
+        type: 'roster', you: c.slot, slots, seed: this.mapSeed,
         room: this.meta ? { code: this.meta.code, name: this.meta.name } : null,
         killsToWin: 10
       }));

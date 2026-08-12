@@ -3,13 +3,18 @@ layout: post
 title: Stick Fight
 comments: true
 thumbnail: /assets/img/2026-08-12-stick-fight.png
-teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ragdoll-nya asal-asalan, jadi hitbox-nya susah ditebak. WASD untuk gerak, panah untuk arahkan senjata, spasi untuk pakai."
+teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertangan kosong; pedang dan pistol baru turun belakangan, dan dorongan pedang lebih berbahaya daripada damage-nya."
 ---
 
 <style>
 /* Break out of the text column: on a phone the arena was 340px wide, which made
    the stickmen about 26px tall. */
-#sf-stage{position:relative;left:50%;transform:translateX(-50%);width:min(calc(100vw - 12px), 470px, calc(78vh * 0.636));margin:0 0 8px;}
+/* Full width of the screen, but never so tall that the controls fall off the
+   bottom: the arena is 16:9, so height budget = viewport minus the control row. */
+#sf-stage{position:relative;left:50%;transform:translateX(-50%);width:min(calc(100vw - 10px), 1100px, calc((100vh - 210px) * 1.777));margin:0 0 6px;}
+@supports (height: 100dvh) {
+  #sf-stage{width:min(calc(100vw - 10px), 1100px, calc((100dvh - 210px) * 1.777));}
+}
 #sf-wrap{position:relative;}
 #sf-canvas{display:block;width:100%;height:auto;background:#fbfbf7;border:2px solid #222;border-radius:6px;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;}
 #sf-wrap.with-menu{min-height:min(78vh,460px);}
@@ -29,9 +34,9 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 #sf-note{font-size:12px;color:#999;text-align:center;}
 
 /* Controls live under the arena, as real buttons with real touch targets. */
-#sf-controls{display:none;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 14px;user-select:none;-webkit-user-select:none;}
+#sf-controls{display:none;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 14px;touch-action:none;user-select:none;-webkit-user-select:none;}
 #sf-controls.on{display:flex;}
-#sf-pad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,54px);gap:5px;}
+#sf-pad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,54px);gap:5px;touch-action:none;}
 #sf-pad .sf-btn{pointer-events:none;}   /* the pad itself handles the touch */
 #sf-pad .up{grid-area:1/2/2/3;}
 #sf-pad .lf{grid-area:2/1/3/2;}
@@ -55,7 +60,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 
 <div id="sf-stage">
 <div id="sf-wrap" class="with-menu">
-  <canvas id="sf-canvas" width="420" height="660"></canvas>
+  <canvas id="sf-canvas" width="960" height="540"></canvas>
   <div id="sf-menu">
     <h2>🥢 STICK FIGHT</h2>
     <p id="sf-tagline">Ragdoll bertongkat. Pedang mendorong keras, pistol menjangkau jauh, dan jurangnya tidak memaafkan.</p>
@@ -88,8 +93,8 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 <p id="sf-help">
   <b>Keyboard:</b> A/D jalan, W lompat, S merunduk. Panah (atau gerakkan mouse) untuk mengarahkan senjata, <b>spasi</b> atau klik untuk menyerang.<br>
   <b>HP:</b> di layar sentuh, tombol arah di kiri; lingkaran di kanan untuk mengarahkan senjata — <b>lepas jarimu untuk menyerang</b>.<br>
-  <b>Senjata:</b> pedang 22 &amp; dorongan keras, pistol 14 &amp; dorongan kecil, tangan kosong 7. Senjata diambil dari peti di peta, dan pistol cuma punya 8 butir.<br>
-  <b>Jatuh ke jurang tetap mati</b> — dorongan pedang lebih berbahaya daripada damage-nya.
+  <b>Senjata:</b> semua mulai bertangan kosong (7 damage). Pedang (22 + dorongan keras) dan pistol (14, 8 butir) muncul sendiri di peta tiap beberapa detik — ambil dengan menabraknya.<br>
+  <b>Jatuh ke jurang tetap mati</b> — dorongan pedang lebih berbahaya daripada damage-nya. Petanya diacak tiap ronde.
 </p>
 
 <script src="/assets/js/stickfight-sim.js"></script>
@@ -197,6 +202,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     });
     padEl.addEventListener('pointermove', function (e) {
       if (e.pointerType === 'mouse' && !e.buttons) return;   // only while held down
+      if (e.cancelable) e.preventDefault();                  // never scroll the page
       setDir(e);
     });
     padEl.addEventListener('pointerup', clearDir);
@@ -226,7 +232,11 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
       }
       aimFrom(e);
     });
-    ap.addEventListener('pointermove', function (e) { if (padDrag) aimFrom(e); });
+    ap.addEventListener('pointermove', function (e) {
+      if (!padDrag) return;
+      if (e.cancelable) e.preventDefault();
+      aimFrom(e);
+    });
     var endPad = function () {
       if (padDrag) pad.fire = 4;        // release = attack, tap or drag alike
       padDrag = null;
@@ -360,7 +370,6 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   }
 
   function drawCrate(pk) {
-    if (pk.taken > 0) return;
     ink(2);
     ctx.save();
     ctx.translate(pk.x, pk.y - 14);
@@ -623,7 +632,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   function startSolo() {
     var name = (nameEl.value || 'kamu').slice(0, 12);
     try { localStorage.setItem('sf_name', name); } catch (e) {}
-    world = S.createWorld(Date.now() % 100000);
+    world = S.createWorld(Date.now() % 100000);   // new arena every match
     me = S.addPlayer(world, 'me', name, 0);
     bots = [];
     var botNames = ['botak', 'bonar', 'bombom'];
@@ -656,7 +665,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   // sends back. No local prediction, so a swing lands when the server says it
   // did — at 20Hz with interpolation that reads as a slight weight, not as lag.
   var Wire = window.StickWire;
-  var ws = null, roster = [], myId = null, snapAt = 0, myPing = 0;
+  var ws = null, roster = [], myId = null, snapAt = 0, myPing = 0, mapSeed = null;
   var createBtn = document.getElementById('sf-create');
   var joinBtn = document.getElementById('sf-join');
 
@@ -691,7 +700,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     myPing = ping || 0;
 
     ws.onopen = function () {
-      world = S.createWorld(1);
+      world = S.createWorld(1);      // replaced as soon as the roster names the seed
       world.players = {};
       bots = []; winner = null; myId = null;
       mode = 'online';
@@ -702,6 +711,14 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
       if (typeof ev.data === 'string') {
         var msg = JSON.parse(ev.data);
         if (msg.type === 'roster') {
+          // Every room generates its own arena from a seed. Without rebuilding on
+          // it we would draw different platforms than the ones being fought on.
+          if (msg.seed != null && msg.seed !== mapSeed) {
+            mapSeed = msg.seed;
+            var keep = world ? world.players : {};
+            world = S.createWorld(mapSeed);
+            world.players = keep;
+          }
           roster = [];
           for (var i = 0; i < msg.slots.length; i++) roster[msg.slots[i].slot] = msg.slots[i];
           if (roster[msg.you]) myId = roster[msg.you].id;

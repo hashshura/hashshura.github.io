@@ -60,7 +60,9 @@
 
     var bullets = world.bullets.length > 40 ? world.bullets.slice(0, 40) : world.bullets;
     var fx = world.fx.length > 12 ? world.fx.slice(0, 12) : world.fx;
-    var len = 1 + 4 + 1 + 1 + sizes + 1 + bullets.length * 6 + 1 + 1 + fx.length * 8;
+    var crates = world.pickups.length > 8 ? world.pickups.slice(0, 8) : world.pickups;
+    var len = 1 + 4 + 1 + 1 + sizes + 1 + bullets.length * 6 +
+              1 + crates.length * 5 + 1 + fx.length * 8;
     var buf = new ArrayBuffer(len), dv = new DataView(buf), o = 0;
 
     dv.setUint8(o, T_SNAPSHOT); o += 1;
@@ -110,11 +112,14 @@
       dv.setInt8(o, clampI8(Math.round(bullets[i].vy))); o += 1;
     }
 
-    var pickMask = 0;
-    for (i = 0; i < world.pickups.length && i < 8; i++) {
-      if (world.pickups[i].taken <= 0) pickMask |= 1 << i;
+    // Crates drop in over the course of a match, so their positions travel with
+    // the snapshot rather than being derived from the map seed.
+    dv.setUint8(o, crates.length); o += 1;
+    for (i = 0; i < crates.length; i++) {
+      dv.setUint8(o, WEAPON_ID[crates[i].kind] || 0); o += 1;
+      dv.setInt16(o, Math.round(crates[i].x)); o += 2;
+      dv.setInt16(o, Math.round(crates[i].y)); o += 2;
     }
-    dv.setUint8(o, pickMask); o += 1;
 
     dv.setUint8(o, fx.length); o += 1;
     for (i = 0; i < fx.length; i++) {
@@ -185,9 +190,13 @@
       world.bullets.push({ x: bx, y: by, vx: bvx, vy: bvy, life: 60 });
     }
 
-    var pickMask = dv.getUint8(o); o += 1;
-    for (var i = 0; i < world.pickups.length; i++) {
-      world.pickups[i].taken = (pickMask & (1 << i)) ? 0 : 1;
+    var nc = dv.getUint8(o); o += 1;
+    world.pickups.length = 0;
+    for (var c = 0; c < nc; c++) {
+      var ck = dv.getUint8(o); o += 1;
+      var cx = dv.getInt16(o); o += 2;
+      var cy = dv.getInt16(o); o += 2;
+      world.pickups.push({ kind: WEAPON_NAME[ck], x: cx, y: cy });
     }
 
     var nf = dv.getUint8(o); o += 1;

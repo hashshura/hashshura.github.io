@@ -19,11 +19,12 @@
   'use strict';
 
   // ---- arena ----------------------------------------------------------------
-  // Portrait, because a phone is portrait: the whole arena fits a phone screen
-  // at a readable size, so nobody needs a zoomed-in camera and everybody sees the
-  // same map. Roughly 7 bodies wide and 11 tall — a climbing map, which suits
-  // knockback being the thing that kills you.
-  var W = 420, H = 660;
+  // The arena is big and horizontal — 14 bodies wide, 8 tall — because a cramped
+  // map plays worse than a spacious one. It is deliberately larger than any single
+  // screen shows: the client draws a fixed-size window of it that follows you, the
+  // same window size for every player on every device, so a phone and a laptop see
+  // exactly as much of the fight as each other.
+  var W = 960, H = 540;
   var DT = 1 / 60;          // the sim always steps at a fixed 60Hz
   var GRAV = 1500;
   var VOID_Y = H + 90;      // below this you are gone, knockback included
@@ -44,7 +45,9 @@
   };
   var BULLET_SPEED = 15;    // px per tick — fast, but dodgeable at range
   var RESPAWN = 150;        // 2.5s
-  var PICKUP_RESPAWN = 420; // 7s
+  var CRATE_EVERY = 270;    // a weapon appears every 4.5s
+  var CRATE_FIRST = 150;    // the first one 2.5s in — everyone opens with fists
+  var MAX_CRATES = 4;
   var MAX_HP = 100;
   var FLAIL_ON_HIT = 26;    // ticks of limp ragdoll after being hit
   var SWING_TICKS = 11;     // how long the arm takes to follow through
@@ -55,36 +58,72 @@
   }
 
   // ---- world ----------------------------------------------------------------
+  // The map is generated from the room's seed, so every room is a different
+  // arena and both ends compute the identical one. Row heights are fixed —
+  // 114/94/90px apart, all inside a 139px jump — and only the platforms within
+  // each row vary, which keeps every layout climbable without having to search
+  // for one.
+  var ROWS = [470, 356, 262, 172];
+
+  function buildMap(rs) {
+    var plats = [];
+    // bottom deck: wide, roughly centred, with a pit either side of it
+    var bw = 520 + Math.floor(rnd(rs) * 220);
+    var bx = Math.round((W - bw) / 2 + (rnd(rs) * 90 - 45));
+    plats.push({ x: bx, y: ROWS[0], w: bw, h: 16 });
+
+    for (var r = 1; r < ROWS.length; r++) {
+      var below = plats.filter(function (q) { return q.y === ROWS[r - 1]; });
+      var n = 2 + (rnd(rs) < 0.45 ? 1 : 0);          // 2 or 3 ledges per row
+      var slot = W / n;
+      var row = [];
+      for (var i = 0; i < n; i++) {
+        var w = Math.round(120 + rnd(rs) * (slot * 0.62 - 120));
+        if (w < 110) w = 110;
+        var x = Math.round(i * slot + rnd(rs) * Math.max(8, slot - w - 8));
+        var pl = { x: x, y: ROWS[r], w: w, h: 14 };
+        // climbable from something below: if nothing on the row under it is
+        // within a jump's horizontal reach, slide it until it is
+        var near = below.some(function (q) {
+          return pl.x < q.x + q.w + 150 && pl.x + pl.w > q.x - 150;
+        });
+        if (!near && below.length) {
+          var q0 = below[Math.floor(rnd(rs) * below.length)];
+          pl.x = Math.round(q0.x + q0.w / 2 - pl.w / 2);
+        }
+        row.push(pl);
+      }
+      // Space them out. The reachability nudge above can shove two ledges into
+      // each other, which reads as one lumpy platform with a notch in it.
+      row.sort(function (a, b) { return a.x - b.x; });
+      var cursor = 10;
+      for (var k = 0; k < row.length; k++) {
+        if (row[k].x < cursor) row[k].x = cursor;
+        if (row[k].x + row[k].w > W - 10) { row.length = k; break; }   // no room left
+        cursor = row[k].x + row[k].w + 70;                             // a real gap
+      }
+      if (!row.length) row.push({ x: Math.round(W / 2 - 70), y: ROWS[r], w: 140, h: 14 });
+      for (var m = 0; m < row.length; m++) plats.push(row[m]);
+    }
+    return plats;
+  }
+
   function createWorld(seed) {
+    var rs = { s: (seed || 12345) >>> 0 };
+    var plats = buildMap(rs);
+    var spawns = [];
+    for (var i = 0; i < plats.length; i++) {
+      spawns.push({ x: Math.round(plats[i].x + plats[i].w / 2), y: plats[i].y - 10 });
+    }
+
     return {
       t: 0,
       w: W, h: H,
-      seed: { s: (seed || 12345) >>> 0 },
-      // platforms floating over a void; falling off is a real way to die
-      // Stacked decks about 90px apart — a jump clears ~139px — staggered so you
-      // climb by alternating sides. The bottom deck is narrower than the arena, so
-      // there is a pit on both sides of it and no safe floor anywhere.
-      platforms: [
-        { x: 75,  y: 600, w: 270, h: 14 },
-        { x: 15,  y: 514, w: 140, h: 12 },
-        { x: 265, y: 514, w: 140, h: 12 },
-        { x: 140, y: 428, w: 140, h: 12 },
-        { x: 20,  y: 342, w: 130, h: 12 },
-        { x: 270, y: 342, w: 130, h: 12 },
-        { x: 135, y: 256, w: 150, h: 12 },
-        { x: 15,  y: 170, w: 120, h: 12 },
-        { x: 285, y: 170, w: 120, h: 12 }
-      ],
-      spawns: [ {x:210,y:590}, {x:85,y:504}, {x:335,y:504}, {x:210,y:418},
-                {x:85,y:332}, {x:335,y:332}, {x:210,y:246}, {x:75,y:160} ],
-      pickups: [
-        { kind: 'sword', x: 210, y: 252, taken: 0 },
-        { kind: 'sword', x: 210, y: 424, taken: 0 },
-        { kind: 'gun',   x: 85,  y: 510, taken: 0 },
-        { kind: 'gun',   x: 335, y: 510, taken: 0 },
-        { kind: 'gun',   x: 75,  y: 166, taken: 0 },
-        { kind: 'gun',   x: 345, y: 166, taken: 0 }
-      ],
+      seed: rs,
+      platforms: plats,
+      spawns: spawns,
+      pickups: [],          // everyone starts bare-handed; crates drop in over time
+      crateT: CRATE_FIRST,
       players: {},
       bullets: [],
       fx: []          // transient slash/hit marks, drained by the renderer each frame
@@ -393,10 +432,40 @@
     }
   }
 
+  // A crate lands on top of a ledge, never in mid-air and never on top of
+  // another one. Whichever weapon is missing from the map gets priority, so a
+  // fight is never all swords or all guns for long.
+  function spawnCrate(world) {
+    var haveSword = false, haveGun = false, i;
+    for (i = 0; i < world.pickups.length; i++) {
+      if (world.pickups[i].kind === 'sword') haveSword = true; else haveGun = true;
+    }
+    var kind = !haveSword ? 'sword' : (!haveGun ? 'gun' : (rnd(world.seed) < 0.5 ? 'sword' : 'gun'));
+    for (var tries = 0; tries < 14; tries++) {
+      var pl = world.platforms[Math.floor(rnd(world.seed) * world.platforms.length)];
+      var x = Math.round(pl.x + 24 + rnd(world.seed) * Math.max(1, pl.w - 48));
+      var y = pl.y - 4;
+      var clash = false;
+      for (i = 0; i < world.pickups.length; i++) {
+        var pk = world.pickups[i];
+        if (Math.abs(pk.x - x) < 80 && Math.abs(pk.y - y) < 30) { clash = true; break; }
+      }
+      if (!clash) {
+        world.pickups.push({ kind: kind, x: x, y: y });
+        world.fx.push({ k: 'pick', x: x, y: y, t: 16 });
+        return;
+      }
+    }
+  }
+
   function stepPickups(world) {
-    for (var i = 0; i < world.pickups.length; i++) {
+    world.crateT--;
+    if (world.crateT <= 0) {
+      world.crateT = CRATE_EVERY;
+      if (world.pickups.length < MAX_CRATES) spawnCrate(world);
+    }
+    for (var i = world.pickups.length - 1; i >= 0; i--) {
       var pk = world.pickups[i];
-      if (pk.taken > 0) { pk.taken--; continue; }
       for (var id in world.players) {
         var p = world.players[id];
         if (p.dead) continue;
@@ -406,7 +475,7 @@
           p.weapon = pk.kind;
           p.ammo = WEAPONS[pk.kind].ammo;
           p.cd = Math.max(p.cd, 12);
-          pk.taken = PICKUP_RESPAWN;
+          world.pickups.splice(i, 1);        // taken; another will drop in later
           world.fx.push({ k: 'pick', x: pk.x, y: pk.y, t: 16 });
           break;
         }
@@ -428,7 +497,12 @@
           placeBody(p, sp.x, sp.y);
           p.dead = false; p.hp = MAX_HP; p.flail = 0; p.cd = 0;
         } else {
-          p.duckAmt = 1; integrate(p); solveLinks(p, 0.35); collide(world, p);  // corpse keeps tumbling
+          // A corpse tumbles where it can be seen, then parks. Left falling it
+          // gains 100px a tick, and every point moving that far forces a full
+          // keyframe into every snapshot for something nobody is looking at.
+          if (p.pts[HIPS].y < VOID_Y + 140) {
+            p.duckAmt = 1; integrate(p); solveLinks(p, 0.35); collide(world, p);
+          }
           continue;
         }
       }
