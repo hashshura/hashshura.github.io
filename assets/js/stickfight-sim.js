@@ -47,6 +47,7 @@
   var PICKUP_RESPAWN = 420; // 7s
   var MAX_HP = 100;
   var FLAIL_ON_HIT = 26;    // ticks of limp ragdoll after being hit
+  var SWING_TICKS = 11;     // how long the arm takes to follow through
 
   function rnd(seedRef) { // small deterministic PRNG so server and replays agree
     seedRef.s = (seedRef.s * 1664525 + 1013904223) % 4294967296;
@@ -97,7 +98,7 @@
       id: id, name: (name || 'anon').slice(0, 12), color: colorIdx || i,
       hp: MAX_HP, kills: 0, deaths: 0, dead: false, respawn: 0,
       weapon: 'fist', ammo: 0, cd: 0, flail: 0, facing: 1, grounded: false,
-      aim: 0, walk: 0, stride: 0, duckAmt: 1, lastHitBy: null, lastHitAt: -999,
+      aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, lastHitBy: null, lastHitAt: -999,
       pts: [], input: { l: 0, r: 0, jump: 0, duck: 0, fire: 0, aim: 0 }
     };
     placeBody(p, sp.x, sp.y);
@@ -232,10 +233,26 @@
       pull(p.pts[FOOTR], hips, hips.x + stride, footY, 0.16 * power);
     }
 
-    // The weapon arm points where you aim; the other arm counterposes.
+    // The weapon arm points where you aim — and while a melee attack is playing
+    // out, it actually travels: a sword sweeps through the arc it is cutting, a
+    // fist punches straight out and comes back. The hitbox moves with it, so the
+    // animation is the attack rather than a decoration on top of one.
     var aimPow = p.flail > 0 ? 0.15 : 1;
-    pull(p.pts[HANDR], chest, chest.x + Math.cos(p.aim) * ARM,
-         chest.y + Math.sin(p.aim) * ARM, 0.35 * aimPow);
+    var ang = p.aim, reach = ARM;
+    if (p.swing > 0) {
+      var k = 1 - p.swing / SWING_TICKS;             // 0 at the start, 1 at the end
+      if (p.swingKind === 'sword') {
+        var arc = WEAPONS.sword.arc;
+        ang = p.swingAim - arc * 0.5 + arc * k;      // lead the blade through
+        reach = ARM * 1.18;
+      } else {
+        ang = p.swingAim;
+        reach = ARM * (1 + 0.5 * Math.sin(Math.PI * k));   // out, then back
+      }
+      aimPow = Math.max(aimPow, 1);
+    }
+    pull(p.pts[HANDR], chest, chest.x + Math.cos(ang) * reach,
+         chest.y + Math.sin(ang) * reach, 0.5 * aimPow);
     pull(p.pts[HANDL], chest, chest.x - Math.cos(p.aim) * ARM * 0.5,
          chest.y + 8, 0.10 * aimPow);
   }
@@ -297,8 +314,17 @@
     var ax = Math.cos(p.aim), ay = Math.sin(p.aim);
 
     if (w.melee) {
-      world.fx.push({ k: 'slash', x: chest.x, y: chest.y, a: p.aim,
-                      arc: w.arc, r: w.reach, t: 9, big: p.weapon === 'sword' });
+      p.swing = SWING_TICKS;
+      p.swingKind = p.weapon;
+      p.swingAim = p.aim;
+      if (p.weapon === 'sword') {
+        world.fx.push({ k: 'slash', x: chest.x, y: chest.y, a: p.aim,
+                        arc: w.arc, r: w.reach, t: 9, big: true });
+      } else {
+        // bare hands leave no slice path — just the thud where the fist lands
+        world.fx.push({ k: 'jab', x: chest.x + ax * w.reach * 0.85,
+                        y: chest.y + ay * w.reach * 0.85, a: p.aim, r: 0, t: 8 });
+      }
       for (var id in world.players) {
         var q = world.players[id];
         if (q === p || q.dead) continue;
@@ -404,6 +430,7 @@
 
       if (p.cd > 0) p.cd--;
       if (p.flail > 0) p.flail--;
+      if (p.swing > 0) p.swing--;
       p.aim = p.input.aim;
       p.duckAmt = (p.input.duck && p.grounded && p.flail <= 0) ? 0.58 : 1;
 
@@ -491,7 +518,7 @@
   }
 
   return {
-    W: W, H: H, DT: DT, MAX_HP: MAX_HP, WEAPONS: WEAPONS,
+    W: W, H: H, DT: DT, MAX_HP: MAX_HP, WEAPONS: WEAPONS, SWING_TICKS: SWING_TICKS,
     HEAD: HEAD, CHEST: CHEST, HIPS: HIPS, HANDL: HANDL, HANDR: HANDR,
     FOOTL: FOOTL, FOOTR: FOOTR, BONES: BONES, ARM: ARM,
     createWorld: createWorld, addPlayer: addPlayer, step: step,

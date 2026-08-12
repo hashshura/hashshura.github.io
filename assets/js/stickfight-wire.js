@@ -26,8 +26,8 @@
   var SNAP_KEY = 30;           // force a full keyframe every 30 snapshots (1.5s)
   var WEAPON_ID = { fist: 0, sword: 1, gun: 2 };
   var WEAPON_NAME = ['fist', 'sword', 'gun'];
-  var FX_ID = { slash: 0, hit: 1, die: 2, pick: 3 };
-  var FX_NAME = ['slash', 'hit', 'die', 'pick'];
+  var FX_ID = { slash: 0, hit: 1, die: 2, pick: 3, jab: 4 };
+  var FX_NAME = ['slash', 'hit', 'die', 'pick', 'jab'];
 
   var T_SNAPSHOT = 1, T_ROSTER = 2, T_INPUT = 3, T_EVENT = 4;
 

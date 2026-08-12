@@ -29,22 +29,26 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 #sf-note{font-size:12px;color:#999;text-align:center;}
 
 /* Controls live under the arena, as real buttons with real touch targets. */
-#sf-controls{display:none;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:8px;margin:0 0 14px;user-select:none;-webkit-user-select:none;}
+#sf-controls{display:none;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 14px;user-select:none;-webkit-user-select:none;}
 #sf-controls.on{display:flex;}
-#sf-controls .grp{flex:0 0 auto;}
+#sf-pad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,54px);gap:5px;}
+#sf-pad .up{grid-area:1/2/2/3;}
+#sf-pad .lf{grid-area:2/1/3/2;}
+#sf-pad .rt{grid-area:2/3/3/4;}
+#sf-pad .dn{grid-area:3/2/4/3;}
 #sf-controls .grp{display:flex;gap:8px;}
 .sf-btn{font:inherit;font-weight:bold;font-size:20px;line-height:1;min-width:62px;height:62px;border:2px solid #222;border-radius:12px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0 6px;}
 .sf-btn small{font-size:9px;font-weight:normal;color:#888;letter-spacing:.04em;}
 .sf-btn.down{background:#222;color:#fbfbf7;}
 .sf-btn.down small{color:#bbb;}
-#sf-aimwrap{display:flex;align-items:flex-end;gap:8px;}
-#sf-aimpad{width:104px;height:104px;border:2px solid #222;border-radius:50%;background:#fbfbf7;touch-action:none;cursor:grab;}
-#sf-fire{min-width:78px;height:62px;}
+#sf-aimwrap{display:flex;align-items:center;}
+#sf-aimpad{width:128px;height:128px;border:2px solid #222;border-radius:50%;background:#fbfbf7;touch-action:none;cursor:grab;}
+#sf-aimpad.down{background:#f1f1e9;cursor:grabbing;}
 @media (max-width:640px){
   #sf-help{display:none;}
-  .sf-btn{min-width:56px;height:58px;font-size:18px;}
-  #sf-aimpad{width:92px;height:92px;}
-  #sf-fire{min-width:66px;}
+  #sf-pad{grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,48px);}
+  .sf-btn{min-width:54px;height:48px;font-size:17px;}
+  #sf-aimpad{width:116px;height:116px;}
 }
 </style>
 
@@ -68,24 +72,22 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 </div>
 
 <div id="sf-controls">
-  <div class="grp">
-    <button class="sf-btn" data-k="l">◀</button>
-    <button class="sf-btn" data-k="r">▶</button>
-  </div>
-  <div class="grp">
-    <button class="sf-btn" data-k="jump">▲<small>LOMPAT</small></button>
-    <button class="sf-btn" data-k="duck">▼<small>DUDUK</small></button>
+  <div id="sf-pad">
+    <button class="sf-btn up" data-k="jump">▲</button>
+    <button class="sf-btn lf" data-k="l">◀</button>
+    <button class="sf-btn rt" data-k="r">▶</button>
+    <button class="sf-btn dn" data-k="duck">▼</button>
   </div>
   <div id="sf-aimwrap">
-    <canvas id="sf-aimpad" width="208" height="208" title="geser untuk mengarahkan senjata"></canvas>
-    <button class="sf-btn" id="sf-fire">⚔<small>SERANG</small></button>
+    <canvas id="sf-aimpad" width="256" height="256" title="arahkan lalu lepas untuk menyerang"></canvas>
   </div>
 </div>
 </div>
 
 <p id="sf-help">
-  <b>Keyboard:</b> A/D jalan, W lompat, S merunduk. Panah (atau gerakkan mouse) untuk mengarahkan senjata, <b>spasi</b> atau klik untuk memakainya.<br>
-  <b>HP:</b> pedang 22 &amp; dorongan keras, pistol 14 &amp; dorongan kecil, tangan kosong 7. Senjata diambil dari peti di peta, dan pistol cuma punya 8 butir.<br>
+  <b>Keyboard:</b> A/D jalan, W lompat, S merunduk. Panah (atau gerakkan mouse) untuk mengarahkan senjata, <b>spasi</b> atau klik untuk menyerang.<br>
+  <b>HP:</b> di layar sentuh, tombol arah di kiri; lingkaran di kanan untuk mengarahkan senjata — <b>lepas jarimu untuk menyerang</b>.<br>
+  <b>Senjata:</b> pedang 22 &amp; dorongan keras, pistol 14 &amp; dorongan kecil, tangan kosong 7. Senjata diambil dari peti di peta, dan pistol cuma punya 8 butir.<br>
   <b>Jatuh ke jurang tetap mati</b> — dorongan pedang lebih berbahaya daripada damage-nya.
 </p>
 
@@ -131,7 +133,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   // ---- input ---------------------------------------------------------------
   var keys = {};
   var mouse = { cx: 0, cy: 0, has: false };
-  var pad = { move: 0, jump: 0, duck: 0, aim: null, fire: 0 };   // touch state
+  var pad = { l: 0, r: 0, jump: 0, duck: 0, aim: null, fire: 0 };   // touch state
   var touches = {};
 
   window.addEventListener('keydown', function (e) {
@@ -174,20 +176,9 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   var btns = controls ? controls.querySelectorAll('.sf-btn[data-k]') : [];
   for (var bi = 0; bi < btns.length; bi++) hold(btns[bi], btns[bi].getAttribute('data-k'));
 
-  var fireBtn = document.getElementById('sf-fire');
-  if (fireBtn) {
-    fireBtn.addEventListener('pointerdown', function (e) {
-      e.preventDefault();
-      pad.fire = 4;                       // a few frames, so one tap is one swing
-      fireBtn.classList.add('down');
-    });
-    var offFire = function () { fireBtn.classList.remove('down'); };
-    fireBtn.addEventListener('pointerup', offFire);
-    fireBtn.addEventListener('pointercancel', offFire);
-  }
-
-  // The aim pad: drag anywhere in the circle to point the weapon, tap it to use
-  // the weapon — same gesture the analog stick had, with a real touch target.
+  // The aim pad: drag to point the weapon, and lifting your finger attacks in
+  // whatever direction you left it pointing. A plain tap attacks along the
+  // current aim. One thumb, one gesture, no separate fire button to reach for.
   function aimFrom(e) {
     var r = ap.getBoundingClientRect();
     var dx = (e.clientX - r.left) - r.width / 2;
@@ -201,6 +192,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     ap.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       padDrag = { moved: 0, t0: Date.now() };
+      ap.classList.add('down');
       if (ap.setPointerCapture && e.pointerId != null) {
         try { ap.setPointerCapture(e.pointerId); } catch (err) {}
       }
@@ -208,8 +200,9 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     });
     ap.addEventListener('pointermove', function (e) { if (padDrag) aimFrom(e); });
     var endPad = function () {
-      if (padDrag && !padDrag.moved && Date.now() - padDrag.t0 < 350) pad.fire = 4;
+      if (padDrag) pad.fire = 4;        // release = attack, tap or drag alike
       padDrag = null;
+      ap.classList.remove('down');
     };
     ap.addEventListener('pointerup', endPad);
     ap.addEventListener('pointercancel', endPad);
@@ -229,8 +222,8 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 
   function gatherInput(p) {
     var i = p.input;
-    i.l = keys['a'] || (pad.move < 0) ? 1 : 0;
-    i.r = keys['d'] || (pad.move > 0) ? 1 : 0;
+    i.l = (keys['a'] || pad.l) ? 1 : 0;
+    i.r = (keys['d'] || pad.r) ? 1 : 0;
     i.jump = keys['w'] || pad.jump ? 1 : 0;
     i.duck = keys['s'] || pad.duck ? 1 : 0;
 
@@ -423,6 +416,19 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.r, f.a - f.arc / 2, f.a + f.arc / 2);
         ctx.stroke();
+        ctx.restore();
+      } else if (f.k === 'jab') {
+        // a punch has no slice path: just a short impact burst at the knuckles
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, f.t / 8);
+        ink(2.2, '#555');
+        for (var j = 0; j < 3; j++) {
+          var ja = f.a + (j - 1) * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(f.x + Math.cos(ja) * 3, f.y + Math.sin(ja) * 3);
+          ctx.lineTo(f.x + Math.cos(ja) * 9, f.y + Math.sin(ja) * 9);
+          ctx.stroke();
+        }
         ctx.restore();
       } else if (f.k === 'hit' || f.k === 'die') {
         ctx.save();
