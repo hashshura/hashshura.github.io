@@ -7,57 +7,67 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 ---
 
 <style>
-/* Break out of the text column: on a phone the arena was 340px wide, which made
-   the stickmen about 26px tall. */
-/* Full width of the screen, but never so tall that the controls fall off the
-   bottom: the arena is 16:9, so height budget = viewport minus the control row. */
-#sf-stage{position:relative;left:50%;transform:translateX(-50%);width:min(calc(100vw - 10px), 1100px, calc((100vh - 210px) * 1.777));margin:0 0 6px;}
+/* Mobile first: this is played with two thumbs on a phone, so the phone layout
+   is the base and the desktop tweaks are the exception. The arena takes whatever
+   height is left after the controls, and the controls never leave the screen. */
+#sf-stage{position:relative;left:50%;transform:translateX(-50%);width:calc(100vw - 8px);max-width:1100px;margin:0 0 6px;}
 @supports (height: 100dvh) {
-  #sf-stage{width:min(calc(100vw - 10px), 1100px, calc((100dvh - 210px) * 1.777));}
+  #sf-stage{width:min(calc(100vw - 8px), calc((100dvh - 230px) * 1.777), 1100px);}
+}
+@supports not (height: 100dvh) {
+  #sf-stage{width:min(calc(100vw - 8px), calc((100vh - 230px) * 1.777), 1100px);}
 }
 #sf-wrap{position:relative;}
-#sf-canvas{display:block;width:100%;height:auto;background:#fbfbf7;border:2px solid #222;border-radius:6px;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;}
-#sf-wrap.with-menu{min-height:min(78vh,460px);}
-#sf-menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(251,251,247,.96);border:2px solid #222;border-radius:6px;font-family:inherit;overflow:auto;padding:12px 0;}
-/* display:flex above outranks the browser's own [hidden]{display:none} */
-#sf-menu[hidden]{display:none;}
-#sf-menu h2{margin:0;font-size:clamp(18px,5vw,28px);}
-#sf-menu p{margin:0;font-size:13px;color:#777;text-align:center;max-width:34em;padding:0 14px;}
-#sf-menu .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:0 10px;}
-#sf-menu input{font:inherit;font-size:16px;padding:9px 12px;border:1.5px solid #ccc;border-radius:8px;background:#fff;min-width:130px;}
-#sf-menu button{font:inherit;font-size:15px;font-weight:bold;padding:11px 18px;border:2px solid #222;border-radius:9px;background:#222;color:#fbfbf7;cursor:pointer;}
+#sf-canvas{display:block;width:100%;height:auto;background:#fbfbf7;border:2px solid #222;border-radius:8px;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;}
+#sf-wrap.with-menu{min-height:min(74vh,470px);}
+
+#sf-menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;background:rgba(251,251,247,.96);border:2px solid #222;border-radius:8px;font-family:inherit;overflow:auto;padding:14px 0;}
+#sf-menu[hidden]{display:none;}   /* display:flex above outranks the browser's own */
+#sf-menu h2{margin:0;font-size:clamp(19px,5.5vw,28px);}
+#sf-menu p{margin:0;font-size:13px;color:#777;text-align:center;max-width:34em;padding:0 16px;}
+#sf-menu .row{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;padding:0 12px;}
+#sf-menu input{font:inherit;font-size:16px;padding:11px 13px;border:1.5px solid #ccc;border-radius:9px;background:#fff;min-width:140px;}
+#sf-menu button{font:inherit;font-size:16px;font-weight:bold;padding:13px 20px;border:2px solid #222;border-radius:10px;background:#222;color:#fbfbf7;cursor:pointer;}
 #sf-menu button.ghost{background:#fbfbf7;color:#222;}
 #sf-menu button:disabled{opacity:.4;cursor:not-allowed;}
-#sf-rooms{width:min(440px,94%);max-height:min(34vh,220px);overflow:auto;font-size:14px;}
-#sf-rooms div{display:flex;justify-content:space-between;gap:8px;padding:10px 10px;border:1px dashed #ccc;border-radius:7px;margin-bottom:5px;cursor:pointer;}
+#sf-rooms{width:min(440px,94%);max-height:min(34vh,220px);overflow:auto;font-size:15px;}
+#sf-rooms div{display:flex;justify-content:space-between;gap:8px;padding:12px 11px;border:1px dashed #ccc;border-radius:8px;margin-bottom:6px;cursor:pointer;}
 #sf-rooms div:active{background:#eee;}
-#sf-note{font-size:12px;color:#999;text-align:center;}
-#sf-exit{position:absolute;top:6px;right:6px;z-index:5;font:inherit;font-size:11px;font-weight:bold;padding:5px 9px;border:1.5px solid #bbb;border-radius:7px;background:rgba(251,251,247,.9);color:#555;cursor:pointer;}
-#sf-exit:hover{color:#222;border-color:#222;}
+#sf-note{font-size:12px;color:#999;text-align:center;padding:0 12px;}
+#sf-exit{position:absolute;top:7px;right:7px;z-index:5;font:inherit;font-size:12px;font-weight:bold;padding:8px 11px;border:1.5px solid #bbb;border-radius:8px;background:rgba(251,251,247,.92);color:#555;cursor:pointer;}
 #sf-exit[hidden]{display:none;}
 
-/* Controls live under the arena, as real buttons with real touch targets. */
-#sf-controls{display:none;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 14px;touch-action:none;user-select:none;-webkit-user-select:none;}
+/* Controls: thumbs at the outer edges, but inset far enough that the analog is
+   not jammed against the side of the screen. */
+#sf-controls{display:none;justify-content:space-between;align-items:center;gap:10px;
+  padding:0 8px 0 4px;margin:8px 0 16px;touch-action:none;user-select:none;-webkit-user-select:none;}
 #sf-controls.on{display:flex;}
-#sf-pad{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,54px);gap:5px;touch-action:none;}
-#sf-pad .sf-btn{pointer-events:none;}   /* the pad itself handles the touch */
+#sf-pad{display:grid;grid-template-columns:repeat(3,66px);grid-template-rows:repeat(3,56px);gap:5px;touch-action:none;}
+#sf-pad .sf-btn{pointer-events:none;}   /* the pad surface owns the gesture */
 #sf-pad .up{grid-area:1/2/2/3;}
 #sf-pad .lf{grid-area:2/1/3/2;}
 #sf-pad .rt{grid-area:2/3/3/4;}
 #sf-pad .dn{grid-area:3/2/4/3;}
-#sf-controls .grp{display:flex;gap:8px;}
-.sf-btn{font:inherit;font-weight:bold;font-size:20px;line-height:1;min-width:62px;height:62px;border:2px solid #222;border-radius:12px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0 6px;}
-.sf-btn small{font-size:9px;font-weight:normal;color:#888;letter-spacing:.04em;}
+.sf-btn{font:inherit;font-weight:bold;font-size:21px;line-height:1;border:2px solid #222;border-radius:13px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;display:flex;align-items:center;justify-content:center;padding:0;}
 .sf-btn.down{background:#222;color:#fbfbf7;}
-.sf-btn.down small{color:#bbb;}
-#sf-aimwrap{display:flex;align-items:center;}
-#sf-aimpad{width:128px;height:128px;border:2px solid #222;border-radius:50%;background:#fbfbf7;touch-action:none;cursor:grab;}
+#sf-aimwrap{display:flex;align-items:center;padding-right:6px;}
+#sf-aimpad{width:132px;height:132px;border:2px solid #222;border-radius:50%;background:#fbfbf7;touch-action:none;cursor:grab;}
 #sf-aimpad.down{background:#f1f1e9;cursor:grabbing;}
-@media (max-width:640px){
-  #sf-help{display:none;}
-  #sf-pad{grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,48px);}
-  .sf-btn{min-width:54px;height:48px;font-size:17px;}
+
+#sf-help{font-size:12px;color:#777;margin:0 0 18px;line-height:1.6;}
+#sf-help b{color:#222;}
+
+/* Narrow phones: shrink a little rather than overflowing */
+@media (max-width:400px){
+  #sf-pad{grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,50px);}
   #sf-aimpad{width:116px;height:116px;}
+  .sf-btn{font-size:19px;border-radius:11px;}
+}
+/* Desktop: keyboard is the real control, so the pads step back */
+@media (min-width:760px){
+  #sf-pad{grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,48px);}
+  #sf-aimpad{width:112px;height:112px;}
+  #sf-controls{opacity:.85;}
 }
 </style>
 
@@ -189,6 +199,14 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       var r = padEl.getBoundingClientRect();
       var dx = (e.clientX - r.left) - r.width / 2;
       var dy = (e.clientY - r.top) - r.height / 2;
+      // The pad captures the pointer, so a thumb that slides off it keeps
+      // steering — drift a little above the pad while your other hand attacks and
+      // "up" stays held, which reads as the stickman jumping on its own. Let go
+      // once the finger has clearly left the pad.
+      if (Math.abs(dx) > r.width * 0.85 || Math.abs(dy) > r.height * 0.85) {
+        clearDir();
+        return;
+      }
       var dead = Math.min(r.width, r.height) * 0.15;
       pad.l = dx < -dead ? 1 : 0;
       pad.r = dx > dead ? 1 : 0;
@@ -196,7 +214,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       pad.duck = dy > dead ? 1 : 0;
       mark();
     };
-    var clearDir = function () { pad.l = pad.r = pad.jump = pad.duck = 0; mark(); };
+    var clearDir;   // hoisted: setDir bails out through it
+    clearDir = function () { pad.l = pad.r = pad.jump = pad.duck = 0; mark(); };
     padEl.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       if (padEl.setPointerCapture && e.pointerId != null) {
@@ -362,7 +381,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     ctx.save();
     ctx.textAlign = align || 'center';
     ctx.fillStyle = color || INK;
-    ctx.font = (bold ? 'bold ' : '') + (size || 13) + 'px sans-serif';
+    ctx.font = (bold ? 'bold ' : '') + Math.round(size || 13) + 'px sans-serif';
     ctx.fillText(s, x, y);
     ctx.restore();
   }
@@ -524,42 +543,54 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     }
   }
 
+  // Drawn in canvas pixels, not arena units. Scaling it with the arena meant a
+  // 390px phone rendered 11px text at about 4px — the scoreboard was unreadable
+  // exactly where the screen was smallest.
   function drawHud(w) {
-    // scoreboard. It overlaps the top-left deck, so it gets a paper backdrop —
-    // without one a stickman fighting up there renders straight through the names.
+    var cw = cv.width, ch = cv.height;
+    var u = Math.max(13, Math.min(20, cw / 28));      // base text size
     var ids = Object.keys(w.players);
     ids.sort(function (a, b) { return w.players[b].kills - w.players[a].kills; });
-    var boxH = 16 + ids.length * 15 + 12;
+
+    var rowH = u * 1.45;
+    var boxW = Math.max(150, Math.min(cw * 0.42, u * 11));
+    var boxH = rowH * ids.length + u * 2.1;
     ctx.save();
-    ctx.globalAlpha = 0.82;
+    ctx.globalAlpha = 0.86;
     ctx.fillStyle = PAPER;
-    ctx.fillRect(0, 0, 122, boxH);
+    ctx.fillRect(0, 0, boxW, boxH);
     ctx.globalAlpha = 1;
-    ink(1, '#ddd');
-    ctx.beginPath(); ctx.moveTo(122, 0); ctx.lineTo(122, boxH); ctx.lineTo(0, boxH); ctx.stroke();
+    ink(1.2, '#ddd');
+    ctx.beginPath();
+    ctx.moveTo(boxW, 0); ctx.lineTo(boxW, boxH); ctx.lineTo(0, boxH);
+    ctx.stroke();
     ctx.restore();
+
     for (var i = 0; i < ids.length; i++) {
       var p = w.players[ids[i]];
+      var y = u * 1.3 + i * rowH;
       ink(2, TEAM[p.color % TEAM.length]);
-      ctx.beginPath(); ctx.arc(12, 18 + i * 15, 4, 0, 7); ctx.stroke();
-      txt(p.name, 22, 22 + i * 15, 11, '#444', p.id === (me && me.id), 'left');
-      txt(String(p.kills), 116, 22 + i * 15, 11, '#222', true, 'right');
+      ctx.beginPath(); ctx.arc(u * 0.75, y - u * 0.32, u * 0.32, 0, 7); ctx.stroke();
+      txt(p.name, u * 1.35, y, u * 0.92, '#333', p.id === (me && me.id), 'left');
+      txt(String(p.kills), boxW - u * 0.6, y, u * 0.95, '#111', true, 'right');
     }
-    txt('sampai ' + KILLS_TO_WIN + ' kill', 12, 24 + ids.length * 15, 9, '#999', false, 'left');
+    txt('sampai ' + KILLS_TO_WIN + ' kill', u * 0.75, boxH - u * 0.5, u * 0.68, '#999', false, 'left');
 
-    if (!me) return;
     if (mode === 'online') {
-      txt('online · ' + (myPing ? myPing + 'ms' : 'tersambung'), S.W - 12, 20, 11, '#999', false, 'right');
+      txt('online · ' + (myPing ? myPing + 'ms' : 'tersambung'), cw - u * 0.7, u * 1.2,
+          u * 0.7, '#999', false, 'right');
     }
+    if (!me) return;
     if (me.dead) {
-      txt('mati — hidup lagi dalam ' + Math.ceil(me.respawn / 60) + 's', S.W / 2, 60, 18, '#c0392b', true);
+      txt('mati — hidup lagi dalam ' + Math.ceil(me.respawn / 60) + 's',
+          cw / 2, ch * 0.14, u * 1.4, '#c0392b', true);
     }
     if (winner) {
       ctx.save();
-      ctx.fillStyle = 'rgba(251,251,247,.86)';
-      ctx.fillRect(0, S.H / 2 - 60, S.W, 120);
-      txt(winner + ' menang', S.W / 2, S.H / 2 - 6, 34, INK, true);
-      txt('klik untuk main lagi', S.W / 2, S.H / 2 + 28, 15, '#666');
+      ctx.fillStyle = 'rgba(251,251,247,.88)';
+      ctx.fillRect(0, ch / 2 - u * 3.4, cw, u * 6.8);
+      txt(winner + ' menang', cw / 2, ch / 2 + u * 0.2, u * 2.4, INK, true);
+      txt('klik untuk main lagi', cw / 2, ch / 2 + u * 2.4, u, '#666');
       ctx.restore();
     }
   }
@@ -611,10 +642,9 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     for (var i = 0; i < world.pickups.length; i++) drawCrate(world.pickups[i]);
     for (var id in world.players) drawPlayer(world.players[id]);
     drawFx(world);
-    // hud, pinned to the screen
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    drawHud(world);
+    // hud, in canvas pixels so it stays legible on a small screen
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawHud(world);
     drawAimPad();
   }
 

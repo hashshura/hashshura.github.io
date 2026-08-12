@@ -293,7 +293,7 @@
     b.x -= dx; b.y -= dy;
   }
 
-  function pose(p) {
+  function pose(p, first) {
     var power = p.dead ? 0 : (p.flail > 0 ? 0.12 : 1);
     if (power <= 0) return;
     var head = p.pts[HEAD], chest = p.pts[CHEST], hips = p.pts[HIPS];
@@ -559,9 +559,10 @@
 
       drive(p);
       integrate(p);
+      var wasGrounded = p.grounded;
       for (var k = 0; k < 4; k++) {
         solveLinks(p, p.flail > 0 ? 0.75 : 1);
-        pose(p);
+        pose(p, k === 0);
       }
       collide(world, p);
 
@@ -570,7 +571,7 @@
       // them like a spring — either can throw the body into the air by itself,
       // which reads as the stickman jumping at random and ignoring the controls.
       // Bleed off upward motion that nobody asked for.
-      if (!p.dead && p.grounded && p.flail <= 0 && p.jumpCool <= 0) {
+      if (!p.dead && (p.grounded || wasGrounded) && p.flail <= 0 && p.jumpCool <= 0) {
         for (var d = 0; d < p.pts.length; d++) {
           var q = p.pts[d], vy = q.y - q.oy;
           if (vy < 0) q.oy = q.y - vy * 0.12;
