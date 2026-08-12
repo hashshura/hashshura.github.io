@@ -48,4 +48,12 @@ const svg = main._svg(390, 219);
 // fighter's head are meant to stay
 ok('no score panel drawn on the arena', !svg.includes('sampai'));
 ok('fighters still labelled in the arena', svg.includes('>kamu<'));
+
+// weapon bar: does it report the sim's own numbers, and does discard reach it?
+const gear = nodes['sf-gear'], what = nodes['sf-gear-what'], dmg = nodes['sf-gear-dmg'],
+      ammo = nodes['sf-gear-ammo'], drop = nodes['sf-drop'];
+ok('weapon bar visible in a match', gear.hidden === false);
+ok('starts bare-handed', /TANGAN/.test(what.textContent), what.textContent);
+ok('shows damage from the sim table', dmg.textContent.indexOf(StickSim.WEAPONS.fist.dmg + ' dmg') === 0, dmg.textContent);
+ok('discard disabled while unarmed', drop.disabled === true);
 process.exit(0);

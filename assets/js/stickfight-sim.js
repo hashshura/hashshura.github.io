@@ -169,7 +169,7 @@
       hp: MAX_HP, kills: 0, deaths: 0, dead: false, respawn: 0,
       weapon: 'fist', ammo: 0, cd: 0, flail: 0, facing: 1, grounded: false,
       aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, jumpCool: 0, coyote: 0, lastHitBy: null, lastHitAt: -999,
-      pts: [], input: { l: 0, r: 0, jump: 0, duck: 0, fire: 0, aim: 0 }
+      pts: [], input: { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, aim: 0 }
     };
     placeBody(p, sp.x, sp.y);
     world.players[id] = p;
@@ -385,6 +385,15 @@
     world.fx.push({ k: 'die', x: victim.pts[CHEST].x, y: victim.pts[CHEST].y, t: 26 });
   }
 
+  // Discarding is just letting go: the weapon is gone, not dropped. Bare hands
+  // hit for 7 but swing twice as fast as a sword, so it is a real choice.
+  function discardWeapon(p) {
+    if (p.weapon === 'fist' || p.dead) return;
+    p.weapon = 'fist';
+    p.ammo = 0;
+    p.cd = Math.max(p.cd, 10);
+  }
+
   function useWeapon(world, p) {
     var w = WEAPONS[p.weapon];
     if (p.cd > 0 || p.dead) return;
@@ -585,6 +594,8 @@
       else if (p.coyote > 0) { p.coyote--; p.grounded = true; }
 
       if (p.input.fire) useWeapon(world, p);
+      if (p.input.discard && !p._dropped) { discardWeapon(p); p._dropped = true; }
+      if (!p.input.discard) p._dropped = false;
 
       // the void
       var hips = p.pts[HIPS];

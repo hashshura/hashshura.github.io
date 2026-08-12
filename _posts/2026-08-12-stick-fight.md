@@ -12,15 +12,28 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
    height is left after the controls, and the controls never leave the screen. */
 #sf-stage{position:relative;left:50%;transform:translateX(-50%);width:calc(100vw - 8px);max-width:1100px;margin:0 0 6px;}
 @supports (height: 100dvh) {
-  #sf-stage{width:min(calc(100vw - 8px), calc((100dvh - 268px) * 1.777), 1100px);}
+  #sf-stage{width:min(calc(100vw - 8px), calc((100dvh - 300px) * 1.777), 1100px);}
 }
 @supports not (height: 100dvh) {
-  #sf-stage{width:min(calc(100vw - 8px), calc((100vh - 268px) * 1.777), 1100px);}
+  #sf-stage{width:min(calc(100vw - 8px), calc((100vh - 300px) * 1.777), 1100px);}
 }
 #sf-wrap{position:relative;}
-/* The scoreboard lives above the arena, not on top of it: overlaid in a corner it
-   covered the ledge people were fighting on. */
-#sf-score{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px;margin:0 2px 5px;font-size:13px;line-height:1;}
+/* Weapon bar: one fixed-height line above the arena. It reports what you are
+   holding and lets you throw it away. Fixed height because anything above the
+   canvas that can wrap will shove the whole map down a line mid-fight. */
+#sf-gear{display:flex;align-items:center;gap:8px;height:38px;margin:0 2px 5px;padding:0 9px;
+  border:1.5px solid #ddd;border-radius:9px;background:#fbfbf7;font-size:13px;line-height:1;
+  white-space:nowrap;overflow:hidden;}
+#sf-gear[hidden]{display:none;}
+#sf-gear-what{font-weight:bold;}
+#sf-gear-dmg,#sf-gear-ammo{color:#777;font-size:12px;}
+#sf-drop{margin-left:auto;font:inherit;font-size:12px;font-weight:bold;padding:7px 11px;
+  border:1.5px solid #222;border-radius:8px;background:#fbfbf7;color:#222;cursor:pointer;flex:0 0 auto;}
+#sf-drop:disabled{opacity:.35;cursor:not-allowed;border-color:#bbb;}
+
+/* Scoreboard sits below everything, where wrapping to a second line moves
+   nothing that matters. */
+#sf-score{display:flex;flex-wrap:wrap;align-items:center;gap:5px 8px;margin:2px 2px 10px;font-size:13px;line-height:1;}
 #sf-score[hidden]{display:none;}
 #sf-score .who{display:flex;align-items:center;gap:5px;padding:5px 8px;border:1.5px solid #ddd;border-radius:8px;background:#fbfbf7;}
 #sf-score .who.self{border-color:#222;font-weight:bold;}
@@ -81,7 +94,12 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 </style>
 
 <div id="sf-stage">
-<div id="sf-score" hidden></div>
+<div id="sf-gear" hidden>
+  <span id="sf-gear-what">✊ TANGAN</span>
+  <span id="sf-gear-dmg"></span>
+  <span id="sf-gear-ammo"></span>
+  <button type="button" id="sf-drop" disabled>buang</button>
+</div>
 <div id="sf-wrap" class="with-menu">
   <canvas id="sf-canvas" width="960" height="540"></canvas>
   <button id="sf-exit" hidden title="kembali ke menu (Esc)">✕ menu</button>
@@ -101,6 +119,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   </div>
 </div>
 
+<div id="sf-score" hidden></div>
+
 <div id="sf-controls">
   <div id="sf-pad">
     <button class="sf-btn up" data-k="jump">▲</button>
@@ -117,7 +137,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 <p id="sf-help">
   <b>Keyboard:</b> A/D jalan, W lompat, S merunduk. Panah (atau gerakkan mouse) untuk mengarahkan senjata, <b>spasi</b> atau klik untuk menyerang.<br>
   <b>HP:</b> di layar sentuh, tombol arah di kiri; lingkaran di kanan untuk mengarahkan senjata — <b>lepas jarimu untuk menyerang</b>.<br>
-  <b>Senjata:</b> semua mulai bertangan kosong (7 damage). Pedang (22 + dorongan keras) dan pistol (14, 8 butir) muncul sendiri di peta tiap beberapa detik — ambil dengan menabraknya.<br>
+  <b>Senjata:</b> tombol <b>buang</b> (atau Q) menjatuhkan senjatamu ke lantai di bawahmu. Semua mulai bertangan kosong (7 damage). Pedang (22 + dorongan keras) dan pistol (14, 8 butir) muncul sendiri di peta tiap beberapa detik — ambil dengan menabraknya.<br>
   <b>Jatuh ke jurang tetap mati</b> — dorongan pedang lebih berbahaya daripada damage-nya. Petanya diacak tiap ronde.
 </p>
 
@@ -163,13 +183,13 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   // ---- input ---------------------------------------------------------------
   var keys = {};
   var mouse = { cx: 0, cy: 0, has: false };
-  var pad = { l: 0, r: 0, jump: 0, duck: 0, aim: null, fire: 0 };   // touch state
+  var pad = { l: 0, r: 0, jump: 0, duck: 0, aim: null, fire: 0, discard: 0 };   // touch state
   var touches = {};
 
   window.addEventListener('keydown', function (e) {
     if (mode === 'menu') return;
     var k = e.key.toLowerCase();
-    if (['a','d','w','s',' ','arrowleft','arrowright','arrowup','arrowdown'].indexOf(k) >= 0) e.preventDefault();
+    if (['a','d','w','s','q',' ','arrowleft','arrowright','arrowup','arrowdown'].indexOf(k) >= 0) e.preventDefault();
     keys[k] = 1;
   });
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = 0; });
@@ -310,6 +330,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     }
     i.fire = (keys[' '] || pad.fire > 0) ? 1 : 0;
     if (pad.fire > 0) pad.fire--;
+    i.discard = (keys['q'] || pad.discard > 0) ? 1 : 0;
+    if (pad.discard > 0) pad.discard--;
     // latch it: the sender samples every 50ms and a tap can be shorter than that
     if (i.fire && typeof pendingFire !== 'undefined') pendingFire = true;
   }
@@ -575,6 +597,34 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     }
   }
 
+  // Weapon bar. Damage and knockback come from the sim's own table, so the
+  // numbers on screen cannot drift from the ones doing the hitting.
+  var gearEl = document.getElementById('sf-gear');
+  var gearWhat = document.getElementById('sf-gear-what');
+  var gearDmg = document.getElementById('sf-gear-dmg');
+  var gearAmmo = document.getElementById('sf-gear-ammo');
+  var dropBtn = document.getElementById('sf-drop');
+  var gearLast = '';
+  var GEAR_NAME = { fist: '✊ TANGAN', sword: '⚔ PEDANG', gun: '🔫 PISTOL' };
+  var GEAR_PUSH = { fist: 'dorongan kecil', sword: 'dorongan kuat', gun: 'dorongan kecil' };
+  function drawGear() {
+    if (!gearEl || !me) return;
+    var wp = S.WEAPONS[me.weapon];
+    var sig = me.weapon + ':' + me.ammo;
+    if (sig === gearLast) return;
+    gearLast = sig;
+    gearWhat.textContent = GEAR_NAME[me.weapon] || me.weapon;
+    gearDmg.textContent = wp.dmg + ' dmg · ' + GEAR_PUSH[me.weapon] +
+      ' · jeda ' + (wp.cd / 60).toFixed(2) + 's';
+    gearAmmo.textContent = wp.ammo ? '· ' + me.ammo + ' butir' : '';
+    dropBtn.disabled = me.weapon === 'fist';
+  }
+  if (dropBtn) {
+    dropBtn.addEventListener('click', function () {
+      pad.discard = 3;         // a few frames, so one press is one throw
+    });
+  }
+
   // The score strip. Rebuilt only when the line-up changes and retouched only
   // when a number changes, so it is not doing DOM work sixty times a second.
   var scoreEl = document.getElementById('sf-score');
@@ -673,6 +723,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     drawHud(world);
     drawAimPad();
     drawScore(world);
+    drawGear();
   }
 
   // ---- game loop -----------------------------------------------------------
@@ -733,6 +784,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     controls.classList.add('on');
     if (exitBtn) exitBtn.hidden = false;
     if (scoreEl) { scoreEl.hidden = false; scoreKey = ''; }
+    if (gearEl) { gearEl.hidden = false; gearLast = ''; }
   }
   function showMenu() {
     menu.hidden = false;
@@ -740,6 +792,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     controls.classList.remove('on');
     if (exitBtn) exitBtn.hidden = true;
     if (scoreEl) scoreEl.hidden = true;
+    if (gearEl) gearEl.hidden = true;
   }
   function leaveMatch() {
     if (mode === 'menu') return;
@@ -916,7 +969,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     if (mode !== 'online' || !ws || ws.readyState !== 1 || !me) return;
     var i = me.input;
     var fire = (i.fire || pendingFire) ? 1 : 0;
-    var bits = (i.l ? 1 : 0) | (i.r ? 2 : 0) | (i.jump ? 4 : 0) | (i.duck ? 8 : 0) | (fire ? 16 : 0);
+    var bits = (i.l ? 1 : 0) | (i.r ? 2 : 0) | (i.jump ? 4 : 0) | (i.duck ? 8 : 0) |
+               (fire ? 16 : 0) | (i.discard ? 32 : 0);
     var aimQ = Math.round(i.aim * 16) / 16;
     var now = Date.now();
     var since = now - lastSentAt;
@@ -925,7 +979,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     if (!bitsChanged && !aimDue && since < 250) return;
     lastBits = bits; lastAim = aimQ; lastSentAt = now; pendingFire = false;
     ws.send(Wire.encodeInput({
-      l: i.l, r: i.r, jump: i.jump, duck: i.duck, fire: fire, aim: aimQ
+      l: i.l, r: i.r, jump: i.jump, duck: i.duck, fire: fire, discard: i.discard, aim: aimQ
     }));
   }, 50);
 
