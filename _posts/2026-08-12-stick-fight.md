@@ -32,6 +32,9 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 #sf-rooms div{display:flex;justify-content:space-between;gap:8px;padding:10px 10px;border:1px dashed #ccc;border-radius:7px;margin-bottom:5px;cursor:pointer;}
 #sf-rooms div:active{background:#eee;}
 #sf-note{font-size:12px;color:#999;text-align:center;}
+#sf-exit{position:absolute;top:6px;right:6px;z-index:5;font:inherit;font-size:11px;font-weight:bold;padding:5px 9px;border:1.5px solid #bbb;border-radius:7px;background:rgba(251,251,247,.9);color:#555;cursor:pointer;}
+#sf-exit:hover{color:#222;border-color:#222;}
+#sf-exit[hidden]{display:none;}
 
 /* Controls live under the arena, as real buttons with real touch targets. */
 #sf-controls{display:none;justify-content:space-between;align-items:center;gap:12px;margin:6px 0 14px;touch-action:none;user-select:none;-webkit-user-select:none;}
@@ -61,6 +64,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 <div id="sf-stage">
 <div id="sf-wrap" class="with-menu">
   <canvas id="sf-canvas" width="960" height="540"></canvas>
+  <button id="sf-exit" hidden title="kembali ke menu (Esc)">✕ menu</button>
   <div id="sf-menu">
     <h2>🥢 STICK FIGHT</h2>
     <p id="sf-tagline">Ragdoll bertongkat. Pedang mendorong keras, pistol menjangkau jauh, dan jurangnya tidak memaafkan.</p>
@@ -287,42 +291,64 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   // miss like a person does.
   function botThink(w, b, tick) {
     var i = b.input, hips = b.pts[S.HIPS], chest = b.pts[S.CHEST];
-    var target = null, best = 1e9;
+    i.l = i.r = i.jump = i.duck = i.fire = 0;
+    if (b.dead) return;
+
+    // nearest living enemy
+    var foe = null, best = 1e9;
     for (var id in w.players) {
       var q = w.players[id];
       if (q === b || q.dead) continue;
-      var d = Math.abs(q.pts[S.HIPS].x - hips.x) + Math.abs(q.pts[S.HIPS].y - hips.y);
-      if (d < best) { best = d; target = q; }
+      var d = Math.abs(q.pts[S.HIPS].x - hips.x) + Math.abs(q.pts[S.HIPS].y - hips.y) * 1.3;
+      if (d < best) { best = d; foe = q; }
     }
-    i.l = i.r = i.jump = i.duck = i.fire = 0;
-    if (!target) return;
 
-    var goal = target.pts[S.CHEST];
-    // unarmed? go shopping instead
-    if (b.weapon === 'fist') {
+    // Unarmed bots go shopping. Crates are worth crossing the map for: a fist
+    // does 7 damage and a sword does 22 with a shove.
+    var goal = null, goalIsCrate = false;
+    if (b.weapon === 'fist' && w.pickups.length) {
       var crate = null, cb = 1e9;
       for (var k = 0; k < w.pickups.length; k++) {
         var pk = w.pickups[k];
-        if (pk.taken > 0) continue;
-        var dd = Math.abs(pk.x - hips.x) + Math.abs(pk.y - hips.y) * 1.4;
+        var dd = Math.abs(pk.x - hips.x) + Math.abs(pk.y - hips.y) * 1.3;
         if (dd < cb) { cb = dd; crate = pk; }
       }
-      if (crate && cb < 420) goal = { x: crate.x, y: crate.y };
+      if (crate) { goal = { x: crate.x, y: crate.y }; goalIsCrate = true; }
+    }
+    if (!goal && foe) goal = { x: foe.pts[S.CHEST].x, y: foe.pts[S.CHEST].y };
+    if (!goal) {                      // nothing to do: patrol a random ledge
+      var pl = w.platforms[(b.color + Math.floor(tick / 240)) % w.platforms.length];
+      goal = { x: pl.x + pl.w / 2, y: pl.y - 20 };
     }
 
-    var want = b.weapon === 'gun' ? 260 : 34;
+    // Keep the distance the weapon wants, but never just stand there: the old
+    // deadband was wider than the approach step, so bots idled in place.
+    var want = goalIsCrate ? 0 : (b.weapon === 'gun' ? 190 : 26);
     var dx = goal.x - hips.x;
-    if (Math.abs(dx) > want + 20) { if (dx > 0) i.r = 1; else i.l = 1; }
-    else if (Math.abs(dx) < want - 20) { if (dx > 0) i.l = 1; else i.r = 1; }
-    if (goal.y < hips.y - 30 && b.grounded && (tick + b.color * 13) % 45 < 8) i.jump = 1;
-    if (b.grounded && hips.y > 500) i.jump = 1;   // scramble off the low ground
+    var adx = Math.abs(dx);
+    if (adx > want + 14) { if (dx > 0) i.r = 1; else i.l = 1; }
+    else if (adx < want - 14) { if (dx > 0) i.l = 1; else i.r = 1; }
+    else if ((tick + b.color * 40) % 150 < 40) { i[dx > 0 ? 'l' : 'r'] = 1; }  // circle a bit
 
-    var aim = Math.atan2(goal.y - chest.y, goal.x - chest.x);
-    aim += Math.sin(tick * 0.05 + b.color) * 0.22;                 // hand wobble
-    i.aim = aim;
-    var reach = b.weapon === 'gun' ? 700 : S.WEAPONS[b.weapon].reach + 12;
-    var dist = Math.hypot(goal.x - chest.x, goal.y - chest.y);
-    if (dist < reach && b.cd === 0 && !target.dead) i.fire = 1;
+    // Climb toward anything above, and hop over anything in the way.
+    var dy = goal.y - hips.y;
+    if (dy < -40 && b.grounded && (tick + b.color * 17) % 26 < 10) i.jump = 1;
+    b._px = b._px === undefined ? hips.x : b._px;
+    b._stuck = (Math.abs(hips.x - b._px) < 0.6 && (i.l || i.r)) ? (b._stuck || 0) + 1 : 0;
+    b._px = hips.x;
+    if (b._stuck > 20) { i.jump = 1; b._stuck = 0; }        // shove yourself loose
+    if (b.grounded && hips.y > S.H - 90 && dy < -20) i.jump = 1;   // climb off the floor
+
+    // duck now and then when someone is shooting from roughly your height
+    if (foe && foe.weapon === 'gun' && Math.abs(foe.pts[S.CHEST].y - chest.y) < 30 &&
+        (tick + b.color * 31) % 120 < 22) i.duck = 1;
+
+    if (!foe) return;
+    var fx = foe.pts[S.CHEST].x - chest.x, fy = foe.pts[S.CHEST].y - chest.y;
+    i.aim = Math.atan2(fy, fx) + Math.sin(tick * 0.05 + b.color) * 0.18;   // hand wobble
+    var dist = Math.sqrt(fx * fx + fy * fy);
+    var reach = b.weapon === 'gun' ? 620 : S.WEAPONS[b.weapon].reach + 14;
+    if (dist < reach && b.cd === 0) i.fire = 1;
   }
 
   // ---- drawing -------------------------------------------------------------
@@ -643,16 +669,32 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     last = 0; acc = 0;
   }
 
+  var exitBtn = document.getElementById('sf-exit');
   function showGame() {
     menu.hidden = true;
     wrap.classList.remove('with-menu');
     controls.classList.add('on');
+    if (exitBtn) exitBtn.hidden = false;
   }
   function showMenu() {
     menu.hidden = false;
     wrap.classList.add('with-menu');
     controls.classList.remove('on');
+    if (exitBtn) exitBtn.hidden = true;
   }
+  function leaveMatch() {
+    if (mode === 'menu') return;
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    mode = 'menu';
+    me = null; bots = []; winner = null;
+    pad.l = pad.r = pad.jump = pad.duck = 0;
+    showMenu();
+    note.textContent = '';
+  }
+  if (exitBtn) exitBtn.addEventListener('click', leaveMatch);
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') leaveMatch();
+  });
 
   document.getElementById('sf-solo').addEventListener('click', startSolo);
 

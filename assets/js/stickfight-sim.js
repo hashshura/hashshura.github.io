@@ -67,19 +67,36 @@
 
   function buildMap(rs) {
     var plats = [];
-    // bottom deck: wide, roughly centred, with a pit either side of it
-    var bw = 520 + Math.floor(rnd(rs) * 220);
-    var bx = Math.round((W - bw) / 2 + (rnd(rs) * 90 - 45));
-    plats.push({ x: bx, y: ROWS[0], w: bw, h: 16 });
 
-    for (var r = 1; r < ROWS.length; r++) {
+    // The floor sets the character of the map, so it varies the most: one wide
+    // deck, one shoved to a side, or two with a pit down the middle. Randomising
+    // only the width left every arena opening the same way.
+    var style = Math.floor(rnd(rs) * 3);
+    if (style === 0) {
+      var gap = 100 + Math.round(rnd(rs) * 90);
+      var half = Math.round((W - gap) / 2 - (10 + rnd(rs) * 70));
+      plats.push({ x: Math.round(20 + rnd(rs) * 40), y: ROWS[0], w: half, h: 16 });
+      plats.push({ x: Math.round(W - 20 - rnd(rs) * 40 - half), y: ROWS[0], w: half, h: 16 });
+    } else {
+      var bw = 360 + Math.floor(rnd(rs) * 380);
+      var bx = style === 1
+        ? Math.round(20 + rnd(rs) * Math.max(1, W - bw - 40))
+        : Math.round((W - bw) / 2 + (rnd(rs) * 70 - 35));
+      plats.push({ x: bx, y: ROWS[0], w: bw, h: 16 });
+    }
+
+    // two or three tiers above it, so the ceiling is not always in the same place
+    var tiers = 2 + (rnd(rs) < 0.6 ? 1 : 0);
+    for (var r = 1; r <= tiers; r++) {
       var below = plats.filter(function (q) { return q.y === ROWS[r - 1]; });
-      var n = 2 + (rnd(rs) < 0.45 ? 1 : 0);          // 2 or 3 ledges per row
+      var n = 1 + Math.floor(rnd(rs) * 3);           // 1, 2 or 3 ledges per row
       var slot = W / n;
       var row = [];
       for (var i = 0; i < n; i++) {
-        var w = Math.round(120 + rnd(rs) * (slot * 0.62 - 120));
-        if (w < 110) w = 110;
+        // a lone ledge is a wide shelf; three are narrow perches
+        var w = n === 1 ? Math.round(200 + rnd(rs) * 180)
+                        : Math.round(110 + rnd(rs) * Math.max(20, slot * 0.6 - 110));
+        if (w < 100) w = 100;
         var x = Math.round(i * slot + rnd(rs) * Math.max(8, slot - w - 8));
         var pl = { x: x, y: ROWS[r], w: w, h: 14 };
         // climbable from something below: if nothing on the row under it is
@@ -103,6 +120,20 @@
         cursor = row[k].x + row[k].w + 70;                             // a real gap
       }
       if (!row.length) row.push({ x: Math.round(W / 2 - 70), y: ROWS[r], w: 140, h: 14 });
+      // Last word on climbability: the spacing pass can shift the one ledge that
+      // was reachable out of reach again, which would strand a whole tier.
+      var reachable = row.some(function (pl) {
+        return below.some(function (q) {
+          return pl.x < q.x + q.w + 150 && pl.x + pl.w > q.x - 150;
+        });
+      });
+      if (!reachable && below.length) {
+        var widest = row[0];
+        for (var z = 1; z < row.length; z++) if (row[z].w > widest.w) widest = row[z];
+        var anchor = below[Math.floor(rnd(rs) * below.length)];
+        widest.x = Math.max(10, Math.min(W - 10 - widest.w,
+                   Math.round(anchor.x + anchor.w / 2 - widest.w / 2)));
+      }
       for (var m = 0; m < row.length; m++) plats.push(row[m]);
     }
     return plats;
@@ -137,7 +168,7 @@
       id: id, name: (name || 'anon').slice(0, 12), color: colorIdx || i,
       hp: MAX_HP, kills: 0, deaths: 0, dead: false, respawn: 0,
       weapon: 'fist', ammo: 0, cd: 0, flail: 0, facing: 1, grounded: false,
-      aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, lastHitBy: null, lastHitAt: -999,
+      aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, jumpCool: 0, coyote: 0, lastHitBy: null, lastHitAt: -999,
       pts: [], input: { l: 0, r: 0, jump: 0, duck: 0, fire: 0, aim: 0 }
     };
     placeBody(p, sp.x, sp.y);
@@ -186,11 +217,15 @@
   function solveLinks(p, stiff) {
     for (var k = 0; k < LINKS.length; k++) {
       var L = LINKS[k], a = p.pts[L[0]], b = p.pts[L[1]], w = L[3] * stiff;
+      var isLeg = L[0] === HIPS && (L[1] === FOOTL || L[1] === FOOTR);
       // ducking is bent knees: the leg links simply get shorter
-      var want = (L[0] === HIPS && (L[1] === FOOTL || L[1] === FOOTR))
-        ? L[2] * p.duckAmt : L[2];
+      var want = isLeg ? L[2] * p.duckAmt : L[2];
       var dx = b.x - a.x, dy = b.y - a.y;
       var d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+      // A leg has a knee: it resists being stretched but folds freely. Held rigid
+      // it acts like a stilt, and the hips get vaulted into the air every time
+      // they pass over the planted foot — a walk that hops by itself.
+      if (isLeg && d < want) continue;
       var diff = (d - want) / d * 0.5 * w;
       dx *= diff; dy *= diff;
       a.x += dx; a.y += dy;
@@ -517,7 +552,9 @@
       if (p.input.jump && p.grounded && p.flail <= 0 && !p._jumped) {
         for (var i = 0; i < p.pts.length; i++) p.pts[i].oy += 11.5;
         p._jumped = true;
+        p.jumpCool = 14;         // do not damp the jump we just asked for
       }
+      if (p.jumpCool > 0) p.jumpCool--;
       if (!p.input.jump) p._jumped = false;
 
       drive(p);
@@ -527,6 +564,24 @@
         pose(p);
       }
       collide(world, p);
+
+      // Only a jump, a hit, or a fall should get you off the ground. Rigid legs
+      // vault the hips over the planted foot as you walk, and landing compresses
+      // them like a spring — either can throw the body into the air by itself,
+      // which reads as the stickman jumping at random and ignoring the controls.
+      // Bleed off upward motion that nobody asked for.
+      if (!p.dead && p.grounded && p.flail <= 0 && p.jumpCool <= 0) {
+        for (var d = 0; d < p.pts.length; d++) {
+          var q = p.pts[d], vy = q.y - q.oy;
+          if (vy < 0) q.oy = q.y - vy * 0.12;
+        }
+      }
+
+      // Coyote time. A walking body's contact flickers as the stride passes over
+      // the planted foot, and every flicker was a jump press being thrown away.
+      // Six ticks of grace also means stepping off a ledge still lets you jump.
+      if (p.grounded) p.coyote = 6;
+      else if (p.coyote > 0) { p.coyote--; p.grounded = true; }
 
       if (p.input.fire) useWeapon(world, p);
 
