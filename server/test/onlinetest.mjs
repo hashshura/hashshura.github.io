@@ -84,9 +84,11 @@ globalThis.WebSocket = class {
 
 const StickSim = require('../../assets/js/stickfight-sim.js');
 const StickWire = require('../../assets/js/stickfight-wire.js');
-const theCtx = makeCtx();
+const theCtx = makeCtx(), padCtx = makeCtx();
 const canvas = el('canvas'); canvas.getContext = () => theCtx;
-const nodes = {};
+const aimpad = el('canvas'); aimpad.width = 208; aimpad.height = 208;
+aimpad.getContext = () => padCtx;
+const nodes = { 'sf-canvas': canvas, 'sf-aimpad': aimpad };
 const stub = (id) => nodes[id] || (nodes[id] = el('div'));
 
 const intervals = [];
@@ -100,7 +102,7 @@ globalThis.window = {
   WebSocket: globalThis.WebSocket, location: { pathname: '/x' }
 };
 globalThis.document = {
-  getElementById: (id) => (id === 'sf-canvas' ? canvas : stub(id)),
+  getElementById: (id) => stub(id),
   createElement: el, addEventListener() {}, querySelector: () => el('i')
 };
 globalThis.localStorage = { s: { sf_server: NET }, getItem(k) { return k in this.s ? this.s[k] : null; }, setItem(k, v) { this.s[k] = v; } };

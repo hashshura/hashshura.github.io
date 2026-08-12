@@ -7,30 +7,50 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 ---
 
 <style>
-#sf-wrap{position:relative;max-width:100%;margin:0 0 10px;}
+/* Break out of the text column: on a phone the arena was 340px wide, which made
+   the stickmen about 26px tall. */
+#sf-stage{position:relative;left:50%;transform:translateX(-50%);width:min(calc(100vw - 12px), 470px, calc(78vh * 0.636));margin:0 0 8px;}
+#sf-wrap{position:relative;}
 #sf-canvas{display:block;width:100%;height:auto;background:#fbfbf7;border:2px solid #222;border-radius:6px;cursor:crosshair;touch-action:none;user-select:none;-webkit-user-select:none;}
-#sf-menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(251,251,247,.94);border-radius:6px;font-family:inherit;}
-/* the display:flex above outranks the browser's own [hidden]{display:none}, so
-   setting menu.hidden would otherwise leave the overlay sitting on the game */
+#sf-wrap.with-menu{min-height:min(78vh,460px);}
+#sf-menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:rgba(251,251,247,.96);border:2px solid #222;border-radius:6px;font-family:inherit;overflow:auto;padding:12px 0;}
+/* display:flex above outranks the browser's own [hidden]{display:none} */
 #sf-menu[hidden]{display:none;}
-#sf-menu h2{margin:0;font-size:26px;letter-spacing:.02em;}
+#sf-menu h2{margin:0;font-size:clamp(18px,5vw,28px);}
 #sf-menu p{margin:0;font-size:13px;color:#777;text-align:center;max-width:34em;padding:0 14px;}
 #sf-menu .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:0 10px;}
-#sf-menu input{font:inherit;font-size:14px;padding:7px 10px;border:1.5px solid #ccc;border-radius:7px;background:#fff;min-width:120px;}
-#sf-menu button{font:inherit;font-size:14px;font-weight:bold;padding:8px 16px;border:2px solid #222;border-radius:8px;background:#222;color:#fbfbf7;cursor:pointer;}
+#sf-menu input{font:inherit;font-size:16px;padding:9px 12px;border:1.5px solid #ccc;border-radius:8px;background:#fff;min-width:130px;}
+#sf-menu button{font:inherit;font-size:15px;font-weight:bold;padding:11px 18px;border:2px solid #222;border-radius:9px;background:#222;color:#fbfbf7;cursor:pointer;}
 #sf-menu button.ghost{background:#fbfbf7;color:#222;}
 #sf-menu button:disabled{opacity:.4;cursor:not-allowed;}
-#sf-rooms{width:min(420px,92%);max-height:150px;overflow:auto;font-size:13px;}
-#sf-rooms div{display:flex;justify-content:space-between;gap:8px;padding:6px 8px;border:1px dashed #ccc;border-radius:6px;margin-bottom:4px;cursor:pointer;}
-#sf-rooms div:hover{background:#f0f0e8;}
-#sf-note{font-size:12px;color:#999;}
-#sf-help{font-size:12px;color:#777;margin:0 0 18px;line-height:1.6;}
-#sf-help b{color:#222;}
-@media (max-width:600px){ #sf-menu h2{font-size:20px;} #sf-help{display:none;} }
+#sf-rooms{width:min(440px,94%);max-height:min(34vh,220px);overflow:auto;font-size:14px;}
+#sf-rooms div{display:flex;justify-content:space-between;gap:8px;padding:10px 10px;border:1px dashed #ccc;border-radius:7px;margin-bottom:5px;cursor:pointer;}
+#sf-rooms div:active{background:#eee;}
+#sf-note{font-size:12px;color:#999;text-align:center;}
+
+/* Controls live under the arena, as real buttons with real touch targets. */
+#sf-controls{display:none;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:8px;margin:0 0 14px;user-select:none;-webkit-user-select:none;}
+#sf-controls.on{display:flex;}
+#sf-controls .grp{flex:0 0 auto;}
+#sf-controls .grp{display:flex;gap:8px;}
+.sf-btn{font:inherit;font-weight:bold;font-size:20px;line-height:1;min-width:62px;height:62px;border:2px solid #222;border-radius:12px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0 6px;}
+.sf-btn small{font-size:9px;font-weight:normal;color:#888;letter-spacing:.04em;}
+.sf-btn.down{background:#222;color:#fbfbf7;}
+.sf-btn.down small{color:#bbb;}
+#sf-aimwrap{display:flex;align-items:flex-end;gap:8px;}
+#sf-aimpad{width:104px;height:104px;border:2px solid #222;border-radius:50%;background:#fbfbf7;touch-action:none;cursor:grab;}
+#sf-fire{min-width:78px;height:62px;}
+@media (max-width:640px){
+  #sf-help{display:none;}
+  .sf-btn{min-width:56px;height:58px;font-size:18px;}
+  #sf-aimpad{width:92px;height:92px;}
+  #sf-fire{min-width:66px;}
+}
 </style>
 
-<div id="sf-wrap">
-  <canvas id="sf-canvas" width="960" height="540"></canvas>
+<div id="sf-stage">
+<div id="sf-wrap" class="with-menu">
+  <canvas id="sf-canvas" width="420" height="660"></canvas>
   <div id="sf-menu">
     <h2>🥢 STICK FIGHT</h2>
     <p id="sf-tagline">Ragdoll bertongkat. Pedang mendorong keras, pistol menjangkau jauh, dan jurangnya tidak memaafkan.</p>
@@ -45,6 +65,22 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     <p id="sf-note"></p>
     <div id="sf-rooms" hidden></div>
   </div>
+</div>
+
+<div id="sf-controls">
+  <div class="grp">
+    <button class="sf-btn" data-k="l">◀</button>
+    <button class="sf-btn" data-k="r">▶</button>
+  </div>
+  <div class="grp">
+    <button class="sf-btn" data-k="jump">▲<small>LOMPAT</small></button>
+    <button class="sf-btn" data-k="duck">▼<small>DUDUK</small></button>
+  </div>
+  <div id="sf-aimwrap">
+    <canvas id="sf-aimpad" width="208" height="208" title="geser untuk mengarahkan senjata"></canvas>
+    <button class="sf-btn" id="sf-fire">⚔<small>SERANG</small></button>
+  </div>
+</div>
 </div>
 
 <p id="sf-help">
@@ -63,6 +99,9 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   var note = document.getElementById('sf-note');
   var roomsEl = document.getElementById('sf-rooms');
   var nameEl = document.getElementById('sf-name');
+  var wrap = document.getElementById('sf-wrap');
+  var controls = document.getElementById('sf-controls');
+  var ap = document.getElementById('sf-aimpad');
   if (!S || !cv || !cv.getContext) { if (menu) menu.innerHTML = '<p>Perangkat ini tidak bisa menjalankan gamenya.</p>'; return; }
   var ctx = cv.getContext('2d');
   if (!ctx) { menu.innerHTML = '<p>Canvas tidak tersedia.</p>'; return; }
@@ -84,14 +123,14 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 
   function sizeCanvas() {
     var wCss = cv.clientWidth || 960;
-    cv.width = Math.round(Math.min(960, wCss));
+    cv.width = Math.round(Math.min(1200, Math.max(280, wCss)));
     cv.height = Math.round(cv.width * S.H / S.W);
     scale = cv.width / S.W;
   }
 
   // ---- input ---------------------------------------------------------------
   var keys = {};
-  var mouse = { x: S.W / 2, y: S.H / 2, has: false };
+  var mouse = { cx: 0, cy: 0, has: false };
   var pad = { move: 0, jump: 0, duck: 0, aim: null, fire: 0 };   // touch state
   var touches = {};
 
@@ -105,65 +144,88 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 
   cv.addEventListener('mousemove', function (e) {
     var r = cv.getBoundingClientRect();
-    mouse.x = (e.clientX - r.left) / r.width * S.W;
-    mouse.y = (e.clientY - r.top) / r.height * S.H;
+    mouse.cx = (e.clientX - r.left) / r.width * cv.width;
+    mouse.cy = (e.clientY - r.top) / r.height * cv.height;
     mouse.has = true;
   });
   cv.addEventListener('mousedown', function (e) { e.preventDefault(); keys[' '] = 1; });
   window.addEventListener('mouseup', function () { keys[' '] = 0; });
 
-  // Touch: the left half is a d-pad, the right half an aim ring. A tap on the
-  // ring fires; a drag aims. Tracked per finger so both thumbs work at once.
-  function touchZone(x) { return x < S.W * 0.5 ? 'move' : 'aim'; }
-  function toWorld(t) {
-    var r = cv.getBoundingClientRect();
-    return { x: (t.clientX - r.left) / r.width * S.W, y: (t.clientY - r.top) / r.height * S.H };
-  }
-  cv.addEventListener('touchstart', function (e) {
-    if (mode === 'menu') return;
-    e.preventDefault();
-    for (var i = 0; i < e.changedTouches.length; i++) {
-      var t = e.changedTouches[i], p = toWorld(t);
-      touches[t.identifier] = { zone: touchZone(p.x), x0: p.x, y0: p.y, x: p.x, y: p.y, moved: 0, t0: Date.now() };
-      applyTouch(touches[t.identifier]);
-    }
-  }, { passive: false });
-  cv.addEventListener('touchmove', function (e) {
-    e.preventDefault();
-    for (var i = 0; i < e.changedTouches.length; i++) {
-      var t = e.changedTouches[i], st = touches[t.identifier];
-      if (!st) continue;
-      var p = toWorld(t);
-      if (Math.abs(p.x - st.x0) > 10 || Math.abs(p.y - st.y0) > 10) st.moved = 1;
-      st.x = p.x; st.y = p.y;
-      applyTouch(st);
-    }
-  }, { passive: false });
-  function endTouch(e) {
-    for (var i = 0; i < e.changedTouches.length; i++) {
-      var t = e.changedTouches[i], st = touches[t.identifier];
-      if (!st) continue;
-      // a tap on the aim ring is "use the weapon"
-      if (st.zone === 'aim' && !st.moved && Date.now() - st.t0 < 350) pad.fire = 3;
-      if (st.zone === 'move') { pad.move = 0; pad.jump = 0; pad.duck = 0; }
-      delete touches[t.identifier];
-    }
-  }
-  cv.addEventListener('touchend', endTouch);
-  cv.addEventListener('touchcancel', endTouch);
+  // Controls are real buttons under the arena rather than zones drawn inside it.
+  // Drawn-on-canvas pads were tiny on a phone and sat on top of the fight.
+  var apCtx = ap && ap.getContext ? ap.getContext('2d') : null;
+  var padDrag = null;
 
-  function applyTouch(st) {
-    if (st.zone === 'move') {
-      var dx = st.x - PAD_C.x, dy = st.y - PAD_C.y;
-      pad.move = Math.abs(dx) > 16 ? (dx > 0 ? 1 : -1) : 0;
-      pad.jump = dy < -22 ? 1 : 0;
-      pad.duck = dy > 22 ? 1 : 0;
-    } else {
-      var ax = st.x - AIM_C.x, ay = st.y - AIM_C.y;
-      if (ax * ax + ay * ay > 100) pad.aim = Math.atan2(ay, ax);
+  function hold(el, key) {
+    function down(e) {
+      e.preventDefault();
+      pad[key] = 1;
+      el.classList.add('down');
+      if (el.setPointerCapture && e.pointerId != null) {
+        try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+    }
+    function up() { pad[key] = 0; el.classList.remove('down'); }
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+  }
+  var btns = controls ? controls.querySelectorAll('.sf-btn[data-k]') : [];
+  for (var bi = 0; bi < btns.length; bi++) hold(btns[bi], btns[bi].getAttribute('data-k'));
+
+  var fireBtn = document.getElementById('sf-fire');
+  if (fireBtn) {
+    fireBtn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      pad.fire = 4;                       // a few frames, so one tap is one swing
+      fireBtn.classList.add('down');
+    });
+    var offFire = function () { fireBtn.classList.remove('down'); };
+    fireBtn.addEventListener('pointerup', offFire);
+    fireBtn.addEventListener('pointercancel', offFire);
+  }
+
+  // The aim pad: drag anywhere in the circle to point the weapon, tap it to use
+  // the weapon — same gesture the analog stick had, with a real touch target.
+  function aimFrom(e) {
+    var r = ap.getBoundingClientRect();
+    var dx = (e.clientX - r.left) - r.width / 2;
+    var dy = (e.clientY - r.top) - r.height / 2;
+    if (dx * dx + dy * dy > 100) {
+      pad.aim = Math.atan2(dy, dx);
+      if (padDrag) padDrag.moved = 1;
     }
   }
-  var PAD_C = { x: 108, y: S.H - 96 }, AIM_C = { x: S.W - 108, y: S.H - 96 };
+  if (ap) {
+    ap.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      padDrag = { moved: 0, t0: Date.now() };
+      if (ap.setPointerCapture && e.pointerId != null) {
+        try { ap.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+      aimFrom(e);
+    });
+    ap.addEventListener('pointermove', function (e) { if (padDrag) aimFrom(e); });
+    var endPad = function () {
+      if (padDrag && !padDrag.moved && Date.now() - padDrag.t0 < 350) pad.fire = 4;
+      padDrag = null;
+    };
+    ap.addEventListener('pointerup', endPad);
+    ap.addEventListener('pointercancel', endPad);
+  }
+
+  // The whole arena is always on screen, at the same framing for everybody. A
+  // phone that zoomed in to make the fighters readable would also see less of the
+  // map than a laptop — that is a competitive disadvantage, not a comfort. The
+  // arena is portrait and small instead, so the figures are big without hiding
+  // anything.
+  var cam = { x: S.W / 2, y: S.H / 2, z: 1 };
+  function updateCamera() { cam.z = 1; cam.x = S.W / 2; cam.y = S.H / 2; }
+  function screenToWorld(cx, cy) {
+    var eff = scale * cam.z;
+    return { x: (cx - cv.width / 2) / eff + cam.x, y: (cy - cv.height / 2) / eff + cam.y };
+  }
 
   function gatherInput(p) {
     var i = p.input;
@@ -179,10 +241,13 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     else if (pad.aim !== null) i.aim = pad.aim;
     else if (mouse.has) {
       var c = p.pts[S.CHEST];
-      i.aim = Math.atan2(mouse.y - c.y, mouse.x - c.x);
+      var m = screenToWorld(mouse.cx, mouse.cy);
+      i.aim = Math.atan2(m.y - c.y, m.x - c.x);
     }
     i.fire = (keys[' '] || pad.fire > 0) ? 1 : 0;
     if (pad.fire > 0) pad.fire--;
+    // latch it: the sender samples every 50ms and a tap can be shorter than that
+    if (i.fire && typeof pendingFire !== 'undefined') pendingFire = true;
   }
 
   // ---- bots ----------------------------------------------------------------
@@ -247,14 +312,14 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
 
   function drawArena(w) {
     ctx.fillStyle = PAPER;
-    ctx.fillRect(0, 0, S.W, S.H);
+    ctx.fillRect(-40, -40, S.W + 80, S.H + 120);
     // the void: hatching below the lowest deck, so the danger reads
     ctx.save();
     ctx.globalAlpha = 0.16;
     ink(1.6);
-    for (var x = -40; x < S.W + 40; x += 22) {
+    for (var x = -60; x < S.W + 60; x += 20) {
       ctx.beginPath();
-      ctx.moveTo(x, S.H); ctx.lineTo(x + 40, S.H - 44);
+      ctx.moveTo(x, S.H); ctx.lineTo(x + 52, S.H - 58);
       ctx.stroke();
     }
     ctx.restore();
@@ -391,54 +456,29 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
   }
 
   function drawHud(w) {
-    // scoreboard
+    // scoreboard. It overlaps the top-left deck, so it gets a paper backdrop —
+    // without one a stickman fighting up there renders straight through the names.
     var ids = Object.keys(w.players);
     ids.sort(function (a, b) { return w.players[b].kills - w.players[a].kills; });
+    var boxH = 16 + ids.length * 15 + 12;
+    ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, 122, boxH);
+    ctx.globalAlpha = 1;
+    ink(1, '#ddd');
+    ctx.beginPath(); ctx.moveTo(122, 0); ctx.lineTo(122, boxH); ctx.lineTo(0, boxH); ctx.stroke();
+    ctx.restore();
     for (var i = 0; i < ids.length; i++) {
       var p = w.players[ids[i]];
       ink(2, TEAM[p.color % TEAM.length]);
-      ctx.beginPath(); ctx.arc(16, 20 + i * 17, 5, 0, 7); ctx.stroke();
-      txt(p.name, 28, 24 + i * 17, 12, '#444', p.id === (me && me.id), 'left');
-      txt(String(p.kills), 132, 24 + i * 17, 12, '#222', true, 'right');
+      ctx.beginPath(); ctx.arc(12, 18 + i * 15, 4, 0, 7); ctx.stroke();
+      txt(p.name, 22, 22 + i * 15, 11, '#444', p.id === (me && me.id), 'left');
+      txt(String(p.kills), 116, 22 + i * 15, 11, '#222', true, 'right');
     }
-    txt('sampai ' + KILLS_TO_WIN + ' kill', 16, 26 + ids.length * 17, 10, '#999', false, 'left');
+    txt('sampai ' + KILLS_TO_WIN + ' kill', 12, 24 + ids.length * 15, 9, '#999', false, 'left');
 
     if (!me) return;
-    var wp = S.WEAPONS[me.weapon];
-    // cooldown ring around the aim analog, and the weapon it belongs to
-    var frac = wp.cd ? 1 - me.cd / wp.cd : 1;
-    ctx.save();
-    ink(3, '#ddd');
-    ctx.beginPath(); ctx.arc(AIM_C.x, AIM_C.y, 44, 0, Math.PI * 2); ctx.stroke();
-    ink(3, me.cd > 0 ? '#c0392b' : '#2e7d32');
-    ctx.beginPath();
-    ctx.arc(AIM_C.x, AIM_C.y, 44, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
-    ctx.stroke();
-    // the aim needle
-    ink(2.4, '#888');
-    ctx.beginPath();
-    ctx.moveTo(AIM_C.x, AIM_C.y);
-    ctx.lineTo(AIM_C.x + Math.cos(me.aim) * 34, AIM_C.y + Math.sin(me.aim) * 34);
-    ctx.stroke();
-    ctx.restore();
-    var label = me.weapon === 'gun' ? ('PISTOL ' + me.ammo) : (me.weapon === 'sword' ? 'PEDANG' : 'TANGAN');
-    txt(label, AIM_C.x, AIM_C.y + 62, 12, '#555', true);
-
-    // the d-pad
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    ink(2.2, '#999');
-    ctx.beginPath(); ctx.arc(PAD_C.x, PAD_C.y, 44, 0, Math.PI * 2); ctx.stroke();
-    var arrows = [[-30, 0, -1, 0], [30, 0, 1, 0], [0, -30, 0, -1], [0, 30, 0, 1]];
-    for (var k = 0; k < arrows.length; k++) {
-      var A = arrows[k];
-      ctx.beginPath();
-      ctx.moveTo(PAD_C.x + A[0] - A[2] * 6, PAD_C.y + A[1] - A[3] * 6);
-      ctx.lineTo(PAD_C.x + A[0] + A[2] * 6, PAD_C.y + A[1] + A[3] * 6);
-      ctx.stroke();
-    }
-    ctx.restore();
-
     if (mode === 'online') {
       txt('online · ' + (myPing ? myPing + 'ms' : 'tersambung'), S.W - 12, 20, 11, '#999', false, 'right');
     }
@@ -455,17 +495,58 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     }
   }
 
+  // The aim pad doubles as the cooldown readout: the ring fills as the weapon
+  // comes back, so "can I swing yet" is answered where your thumb already is.
+  function drawAimPad() {
+    if (!apCtx) return;
+    var W2 = ap.width, C = W2 / 2, R = W2 * 0.40;
+    apCtx.clearRect(0, 0, W2, W2);
+    var wp = me ? S.WEAPONS[me.weapon] : null;
+    var frac = (me && wp && wp.cd) ? Math.min(1, 1 - me.cd / wp.cd) : 1;
+    apCtx.lineWidth = W2 * 0.055;
+    apCtx.lineCap = 'butt';
+    apCtx.strokeStyle = '#e6e6df';
+    apCtx.beginPath(); apCtx.arc(C, C, R, 0, Math.PI * 2); apCtx.stroke();
+    apCtx.strokeStyle = frac >= 1 ? '#2e7d32' : '#c0392b';
+    apCtx.beginPath();
+    apCtx.arc(C, C, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+    apCtx.stroke();
+
+    var a = me ? me.aim : (pad.aim || 0);
+    apCtx.strokeStyle = '#222';
+    apCtx.lineWidth = W2 * 0.045;
+    apCtx.lineCap = 'round';
+    apCtx.beginPath();
+    apCtx.moveTo(C, C);
+    apCtx.lineTo(C + Math.cos(a) * R * 0.72, C + Math.sin(a) * R * 0.72);
+    apCtx.stroke();
+    apCtx.beginPath();
+    apCtx.arc(C + Math.cos(a) * R * 0.72, C + Math.sin(a) * R * 0.72, W2 * 0.05, 0, 7);
+    apCtx.fillStyle = '#222'; apCtx.fill();
+
+    var label = !me ? '' : (me.weapon === 'gun' ? 'PISTOL ' + me.ammo
+      : (me.weapon === 'sword' ? 'PEDANG' : 'TANGAN'));
+    apCtx.fillStyle = '#555';
+    apCtx.textAlign = 'center';
+    apCtx.font = 'bold ' + Math.round(W2 * 0.075) + 'px sans-serif';
+    apCtx.fillText(label, C, W2 * 0.87);      // inside the circle, not clipped by it
+  }
+
   function render() {
-    ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.scale(scale, scale);
+    // world, seen through the camera
+    var eff = scale * cam.z;
+    ctx.setTransform(eff, 0, 0, eff, cv.width / 2 - cam.x * eff, cv.height / 2 - cam.y * eff);
     drawArena(world);
     for (var i = 0; i < world.pickups.length; i++) drawCrate(world.pickups[i]);
     for (var id in world.players) drawPlayer(world.players[id]);
     drawFx(world);
+    // hud, pinned to the screen
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
     drawHud(world);
-    ctx.restore();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawAimPad();
   }
 
   // ---- game loop -----------------------------------------------------------
@@ -488,6 +569,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
       }
     }
     if (mode === 'online' && me) gatherInput(me);   // read controls, server decides
+    updateCamera();
     // Snapshots land at 20Hz, so draw part-way between the last two rather than
     // stepping 50ms at a time. decodeSnapshot leaves the previous position in
     // ox/oy, which is exactly the "from" this needs.
@@ -514,8 +596,19 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     for (var i = 0; i < 3; i++) bots.push(S.addPlayer(world, 'b' + i, botNames[i], i + 1));
     winner = null;
     mode = 'solo';
-    menu.hidden = true;
+    showGame();
     last = 0; acc = 0;
+  }
+
+  function showGame() {
+    menu.hidden = true;
+    wrap.classList.remove('with-menu');
+    controls.classList.add('on');
+  }
+  function showMenu() {
+    menu.hidden = false;
+    wrap.classList.add('with-menu');
+    controls.classList.remove('on');
   }
 
   document.getElementById('sf-solo').addEventListener('click', startSolo);
@@ -568,7 +661,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
       world.players = {};
       bots = []; winner = null; myId = null;
       mode = 'online';
-      menu.hidden = true;
+      showGame();
       last = 0; acc = 0;
     };
     ws.onmessage = function (ev) {
@@ -589,7 +682,7 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     };
     ws.onclose = function () {
       if (mode !== 'online') return;
-      mode = 'menu'; menu.hidden = false; ws = null;
+      mode = 'menu'; showMenu(); ws = null;
       note.textContent = 'Sambungan terputus.';
     };
     ws.onerror = function () { note.textContent = 'Gagal menyambung.'; };
@@ -653,10 +746,35 @@ teaser: "Dua orang bertongkat, satu pedang, satu pistol, dan jurang di bawah. Ra
     joinBtn.addEventListener('click', refreshRooms);
   }
 
-  // send our input up at 20Hz; the server ignores anything it did not ask for
+  // Send input only when it actually changes.
+  //
+  // Cloudflare bills an incoming WebSocket message as a request (at 20:1), and
+  // outgoing ones as nothing — so the upstream input stream, not the 20Hz
+  // snapshot broadcast, is what burns the free tier. Blindly sending 20 packets
+  // a second costs ~1 billed request per player per second even while standing
+  // still. The server treats input as sticky state, so a repeat is redundant
+  // anyway; a keepalive every 250ms keeps us well inside its 20s idle timeout.
+  // Buttons go up the instant they change, because a late jump is a death. Aim
+  // is different: it slides continuously, so left alone it would change on every
+  // single sample and cost as much as sending blindly. It is quantised to ~3.6
+  // degrees and rate-limited to 10Hz, which no one can feel, plus a 4Hz keepalive
+  // so the server never thinks we went quiet.
+  var lastBits = -1, lastAim = null, lastSentAt = 0, pendingFire = false;
   setInterval(function () {
     if (mode !== 'online' || !ws || ws.readyState !== 1 || !me) return;
-    ws.send(Wire.encodeInput(me.input));
+    var i = me.input;
+    var fire = (i.fire || pendingFire) ? 1 : 0;
+    var bits = (i.l ? 1 : 0) | (i.r ? 2 : 0) | (i.jump ? 4 : 0) | (i.duck ? 8 : 0) | (fire ? 16 : 0);
+    var aimQ = Math.round(i.aim * 16) / 16;
+    var now = Date.now();
+    var since = now - lastSentAt;
+    var bitsChanged = bits !== lastBits;
+    var aimDue = aimQ !== lastAim && since >= 100;
+    if (!bitsChanged && !aimDue && since < 250) return;
+    lastBits = bits; lastAim = aimQ; lastSentAt = now; pendingFire = false;
+    ws.send(Wire.encodeInput({
+      l: i.l, r: i.r, jump: i.jump, duck: i.duck, fire: fire, aim: aimQ
+    }));
   }, 50);
 
   window.addEventListener('resize', sizeCanvas);

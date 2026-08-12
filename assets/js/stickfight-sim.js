@@ -19,7 +19,11 @@
   'use strict';
 
   // ---- arena ----------------------------------------------------------------
-  var W = 960, H = 540;
+  // Portrait, because a phone is portrait: the whole arena fits a phone screen
+  // at a readable size, so nobody needs a zoomed-in camera and everybody sees the
+  // same map. Roughly 7 bodies wide and 11 tall — a climbing map, which suits
+  // knockback being the thing that kills you.
+  var W = 420, H = 660;
   var DT = 1 / 60;          // the sim always steps at a fixed 60Hz
   var GRAV = 1500;
   var VOID_Y = H + 90;      // below this you are gone, knockback included
@@ -56,22 +60,29 @@
       w: W, h: H,
       seed: { s: (seed || 12345) >>> 0 },
       // platforms floating over a void; falling off is a real way to die
+      // Stacked decks about 90px apart — a jump clears ~139px — staggered so you
+      // climb by alternating sides. The bottom deck is narrower than the arena, so
+      // there is a pit on both sides of it and no safe floor anywhere.
       platforms: [
-        { x: 130, y: 470, w: 700, h: 16 },
-        { x: 60,  y: 350, w: 210, h: 14 },
-        { x: 690, y: 350, w: 210, h: 14 },
-        { x: 380, y: 258, w: 200, h: 14 },
-        { x: 170, y: 170, w: 150, h: 14 },
-        { x: 640, y: 170, w: 150, h: 14 }
+        { x: 75,  y: 600, w: 270, h: 14 },
+        { x: 15,  y: 514, w: 140, h: 12 },
+        { x: 265, y: 514, w: 140, h: 12 },
+        { x: 140, y: 428, w: 140, h: 12 },
+        { x: 20,  y: 342, w: 130, h: 12 },
+        { x: 270, y: 342, w: 130, h: 12 },
+        { x: 135, y: 256, w: 150, h: 12 },
+        { x: 15,  y: 170, w: 120, h: 12 },
+        { x: 285, y: 170, w: 120, h: 12 }
       ],
-      spawns: [ {x:200,y:460}, {x:760,y:460}, {x:150,y:340}, {x:800,y:340},
-                {x:480,y:248}, {x:240,y:160}, {x:710,y:160} ],
+      spawns: [ {x:210,y:590}, {x:85,y:504}, {x:335,y:504}, {x:210,y:418},
+                {x:85,y:332}, {x:335,y:332}, {x:210,y:246}, {x:75,y:160} ],
       pickups: [
-        { kind: 'sword', x: 480, y: 244, taken: 0 },
-        { kind: 'gun',   x: 160, y: 336, taken: 0 },
-        { kind: 'gun',   x: 800, y: 336, taken: 0 },
-        { kind: 'sword', x: 240, y: 156, taken: 0 },
-        { kind: 'gun',   x: 710, y: 156, taken: 0 }
+        { kind: 'sword', x: 210, y: 252, taken: 0 },
+        { kind: 'sword', x: 210, y: 424, taken: 0 },
+        { kind: 'gun',   x: 85,  y: 510, taken: 0 },
+        { kind: 'gun',   x: 335, y: 510, taken: 0 },
+        { kind: 'gun',   x: 75,  y: 166, taken: 0 },
+        { kind: 'gun',   x: 345, y: 166, taken: 0 }
       ],
       players: {},
       bullets: [],
@@ -151,24 +162,33 @@
     p.grounded = false;
     for (var i = 0; i < p.pts.length; i++) {
       var q = p.pts[i];
+      // On a living body only the feet and hips are solid. Letting a hand or the
+      // head land on a platform means any jump that brushes a ledge leaves you
+      // dangling from an arm, which is reproducible and looks broken. A corpse is
+      // solid all over, so it still tumbles and settles on whatever it lands on.
+      var solid = p.dead || i === FOOTL || i === FOOTR || i === HIPS;
       var planted = false;
-      for (var j = 0; j < world.platforms.length; j++) {
-        var pl = world.platforms[j];
-        if (q.x < pl.x - 3 || q.x > pl.x + pl.w + 3) continue;
-        // Land either by crossing the top surface this tick (however fast), or by
-        // already standing on this platform and having sagged a few px into it.
-        // Without that second case a planted foot that drifts down by more than a
-        // pixel is lost for good and the body falls through the world.
-        var crossed = q.oy <= pl.y + 1 && q.y >= pl.y;
-        var resting = q.g === pl.y && q.y >= pl.y - 2 && q.y < pl.y + 10;
-        if (crossed || resting) {
-          q.y = pl.y;
-          var vx = q.x - q.ox;
-          q.oy = q.y;
-          q.ox = q.x - vx * 0.72;        // friction
-          q.g = pl.y;
-          planted = true;
-          if (i === FOOTL || i === FOOTR) p.grounded = true;
+      if (solid) {
+        for (var j = 0; j < world.platforms.length; j++) {
+          var pl = world.platforms[j];
+          if (q.x < pl.x - 3 || q.x > pl.x + pl.w + 3) continue;
+          // Land either by crossing the top surface this tick (however fast), or
+          // by already standing on this platform and having sagged a few px into
+          // it. Without that second case a planted foot that drifts down by more
+          // than a pixel is lost for good and the body falls through the world.
+          var crossed = q.oy <= pl.y + 1 && q.y >= pl.y;
+          var resting = q.g === pl.y && q.y >= pl.y - 2 && q.y < pl.y + 10;
+          if (crossed || resting) {
+            q.y = pl.y;
+            var vx = q.x - q.ox;
+            q.oy = q.y;
+            q.ox = q.x - vx * 0.72;        // friction
+            q.g = pl.y;
+            planted = true;
+            // hips count as footing too, or landing rump-first on a ledge leaves
+            // you sitting there unable to jump
+            p.grounded = true;
+          }
         }
       }
       if (!planted) q.g = -1;

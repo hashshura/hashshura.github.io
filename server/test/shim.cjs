@@ -86,7 +86,8 @@ function el(tag) {
     getAttribute(k){ return this['attr_'+k] ?? null; },
     addEventListener(t,fn){ if (!listeners.has(this)) listeners.set(this,{}); (listeners.get(this)[t] ||= []).push(fn); },
     getBoundingClientRect(){ return { left:0, top:0, width:this.width, height:this.height }; },
-    querySelector(){ return el('i'); }
+    querySelector(){ return el('i'); },
+    querySelectorAll(){ return []; }
   };
   return e;
 }

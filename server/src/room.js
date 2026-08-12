@@ -17,8 +17,10 @@ import W from '../../assets/js/stickfight-wire.js';
 const MAX_PLAYERS = 6;
 const TICK_MS = 1000 / 60;
 const SNAP_EVERY = 3;          // broadcast at 20Hz
-const IDLE_CLOSE_MS = 45000;   // drop a room that nobody is in
-const HEARTBEAT_MS = 10000;
+const IDLE_CLOSE_MS = 12000;   // stop ticking soon after the room empties;
+                               // an idle loop bills duration for nothing
+const HEARTBEAT_MS = 30000;    // each beat is a billed request on the lobby;
+                               // stay under the lobby's 45s staleness window
 
 export class Room {
   constructor(state, env) {
@@ -117,6 +119,8 @@ export class Room {
 
     this.sendRoster();
     this.startLoop();
+    this.lastBeat = Date.now();
+    this.beat().catch(() => {});
   }
 
   drop(ws) {
@@ -127,6 +131,9 @@ export class Room {
     if (this.world) delete this.world.players[c.id];
     if (this.conns.size === 0) this.emptyAt = Date.now();
     this.sendRoster();
+    // tell the lobby straight away; an empty room should stop being advertised
+    this.lastBeat = Date.now();
+    this.beat().catch(() => {});
   }
 
   sendRoster() {

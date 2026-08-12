@@ -9,6 +9,7 @@
  * a room whose object went away does not linger.
  */
 const STALE_MS = 45000;
+const EMPTY_MS = 20000;   // an empty room stops being advertised this soon
 const MAX_ROOMS = 40;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no I/L/O/0/1
 
@@ -31,7 +32,11 @@ export class Lobby {
   prune() {
     const now = Date.now();
     for (const code of Object.keys(this.rooms)) {
-      if (now - this.rooms[code].ts > STALE_MS) delete this.rooms[code];
+      const r = this.rooms[code];
+      if (now - r.ts > STALE_MS) { delete this.rooms[code]; continue; }
+      // Rooms heartbeat for a while after everyone leaves, so "went silent" is
+      // not enough on its own — an empty room has to age out on emptiness.
+      if (r.emptySince && now - r.emptySince > EMPTY_MS) delete this.rooms[code];
     }
   }
 
@@ -78,7 +83,9 @@ export class Lobby {
         code,
         name: (body.name || 'room ' + code).slice(0, 24),
         private: !!(body.password && body.password.length),
-        players: 0, max: 6, colo, ts: Date.now()
+        players: 0, max: 6, colo, ts: Date.now(),
+        // the host is about to connect; give them a moment before ageing out
+        emptySince: Date.now()
       };
       await this.save();
       return json({ code, colo });
@@ -91,7 +98,8 @@ export class Lobby {
         r.players = body.players | 0;
         r.max = body.max || r.max;
         r.ts = Date.now();
-        // an empty room stops being interesting once its object shuts down
+        if (r.players > 0) r.emptySince = 0;
+        else if (!r.emptySince) r.emptySince = Date.now();
         await this.save();
       }
       return json({ ok: true });

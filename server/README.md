@@ -84,6 +84,20 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
   each room directly and sorts nearest-first.
 - **Bandwidth.** A six-player fight is ~150 bytes per snapshot, so about 3 KB/s
   down and 0.08 KB/s up per client. Fine on mobile data.
+- **What the free tier actually costs you.** Cloudflare bills a Durable Object for
+  *incoming* WebSocket messages (at a 20:1 ratio) and for wall-clock duration;
+  outgoing messages are free. So the 20Hz snapshot broadcast — the big-looking
+  number — costs nothing, and the upstream input stream is the whole bill. Two
+  ceilings, both per day on the free plan:
+  - **100,000 requests** → with input sent on change (~10.6 msg/s while actually
+    fighting) that is roughly **50 player-hours/day**. Sending blindly at 20Hz
+    would have made it 28.
+  - **13,000 GB-s duration** → a running room costs 0.128 GB-s per second no
+    matter how many people are in it, so about **28 room-hours/day**. This is
+    usually the one that binds: six people in one room is six times cheaper per
+    player than six people in six rooms.
+  Hence `IDLE_CLOSE_MS` being short and heartbeats being 30s apart: an empty room
+  that keeps ticking bills duration for nothing.
 - **No client prediction.** Your input goes up, the server decides, the snapshot
   comes back. At 20Hz with interpolation this reads as slight weight rather than
   lag, and it keeps the server the only authority. If it ever feels sluggish, the
