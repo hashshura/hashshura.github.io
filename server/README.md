@@ -125,7 +125,7 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
   checkbox under the controls turns it on and the choice is remembered.
   `PREDICT_DEFAULT` in the post flips the default for everyone.
 
-  Four things this got wrong, all worth remembering:
+  Seven things this got wrong, all worth remembering:
 
   - **One clock.** The send times were stamped with `Date.now()` and the round trip
     measured against `performance.now()`. Epoch minus time-since-page-load put
@@ -146,6 +146,30 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
   - **Replay one way, not both.** The snapshot already contains every tick the
     server ran before sending it, so the only gap left to cover is the trip down.
     Replaying a full round trip's worth double-counts.
+  - **Predict with the input that was SENT, not the input that was held.** Sending
+    ran on its own 50ms timer, so the server's input timeline was a coarser version
+    of the client's and the two simulations were never running the same thing. Run-
+    length comparing them made it plain: identical packets, different durations.
+    The body's shape disagreed by 27px while simply walking undisturbed, on every
+    snapshot, forever — a correction that can never succeed. Sending now happens on
+    the tick the input changes, and the tick's recorded input is the packet the
+    server will act on.
+  - **One offset for the body, not one per joint.** A correction is rarely the same
+    size at every joint, and each offset eased out at its own capped rate, so for
+    the twenty-odd frames a big correction takes to vanish the body was drawn with
+    its joints displaced by different amounts: a stickman pulled long, which is
+    what got reported. Corrections are now split into a translation, which eases,
+    and a shape, which is simply taken.
+  - **A snapshot carries no velocity.** Its ox/oy is the previous snapshot's
+    position — two ticks of travel — so copying it into the prediction handed the
+    body twice its speed and every correction overshot. Position comes from the
+    server; velocity comes from our own history when we agree with it, and from the
+    snapshot interval when we do not, because a shove is mostly velocity and ours
+    would be wrong.
+  - **Re-anchor when our own clock stalls.** A background tab or a long frame leaves
+    the client's tick counter behind the room's, the tick subtraction wraps, and
+    every snapshot lands with no usable history. Measured as three-second runs of
+    blind correction on a real link.
   - **Do not predict a corpse.** While dead, the local simulation ran its own
     respawn, and the sim picks the spawn point from its own random state — a
     different one than the server picked. The body flicked between the two every
@@ -157,8 +181,19 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
   3.4-5.4px against a 4.4px walking step, and there is no vertical desync and no
   respawn flicker.
 
-  One testing note worth keeping: measure the **drawn** position, not the
-  simulated one. Corrections are eased out in the draw offset, so the simulation
+  Testing notes worth keeping, because every one of these produced a convincing
+  wrong answer:
+
+  - **The room must not drive itself.** Its loop is a self-scheduling setTimeout on
+    the real timer queue, and the awaits in a test give it chances to fire on top of
+    the ticks the harness drives. The server ran 23 ticks where the client ran 15,
+    and that mismatch alone produces a divergence no correction can fix. It looked
+    exactly like a netcode bug.
+  - **Only compare drawn coordinates from the same frame.** They are stored during
+    the draw, while corrections arrive on the socket between frames, and the body is
+    not drawn at all when it falls below the arena. Sampling them carelessly
+    reported 226px of stretch, none of it real.
+  - Measure the **drawn** position, not the simulated one. Corrections are eased out in the draw offset, so the simulation
   legitimately steps while the body on screen glides — assertions against the raw
   simulation report teleports that nobody can see. And the harness has to drive
   `Date.now()` from its fake clock, or the client's input throttling never fires

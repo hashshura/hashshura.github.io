@@ -49,6 +49,10 @@ function makeState() {
 }
 
 const { Room } = await import('../src/room.js');
+// The room must not drive itself: its loop is a self-scheduling setTimeout on the
+// real timer queue, and awaits here give it chances to fire on top of the ticks
+// this harness drives. That made the server run 1.5x the client's tick rate.
+const guardRoom = (r) => { r.startLoop = () => {}; return r; };
 const { Lobby } = await import('../src/lobby.js');
 
 const rooms = new Map();
@@ -56,7 +60,7 @@ const env = {};
 env.ROOM = {
   idFromName: (n) => n,
   get: (n) => ({ fetch: (u, i) => {
-    if (!rooms.has(n)) rooms.set(n, new Room(makeState(), env));
+    if (!rooms.has(n)) rooms.set(n, guardRoom(new Room(makeState(), env)));
     return rooms.get(n).fetch(new Req(typeof u === 'string' ? u : u.url, i));
   } })
 };

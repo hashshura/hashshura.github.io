@@ -439,15 +439,17 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // in online mode a point is drawn between the last two snapshots
   var lerpA = 1;
   var drawOffset = null, drawIdx = 0;
+  // One offset for the whole body, applied to every point equally — a correction
+  // that moves the joints by different amounts draws the stickman stretched.
   function px(q) {
     var v = lerpA >= 1 ? q.x : q.ox + (q.x - q.ox) * lerpA;
-    if (drawOffset && drawOffset[q._pi] !== undefined) v += drawOffset[q._pi].x;
+    if (drawOffset) v += drawOffset.x;
     q.dx = v;                     // remember where it was actually drawn
     return v;
   }
   function py(q) {
     var v = lerpA >= 1 ? q.y : q.oy + (q.y - q.oy) * lerpA;
-    if (drawOffset && drawOffset[q._pi] !== undefined) v += drawOffset[q._pi].y;
+    if (drawOffset) v += drawOffset.y;
     q.dy = v;
     return v;
   }
@@ -851,22 +853,22 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         // random state, so a local copy picks a different spawn point than the
         // server and the body flicks between the two.
         predTick = (predTick + 1) & 0xffff;
-        // Recorded even while prediction is off, because the server is applying
-        // these inputs regardless — so a replay after the switch reproduces what
-        // actually happened. Only a corpse records blanks.
+        // Send on the tick the input changes, and record what the server will be
+        // acting on — the sent packet, not the held keys. Recorded even while
+        // prediction is off, because the server is applying it regardless, so a
+        // replay after the switch reproduces what actually happened. Only a corpse
+        // records blanks.
+        var sent = sendInput(predTick);
         var corpse = !!(predMe && predMe.dead);
         inputHist[predTick & 255] = corpse
           // a blank entry, so a replay reaching back across the death — or across
           // the switch — does not re-apply whatever was held down back then
-          ? { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, special: 0, aim: me.input.aim }
-          : {
-            l: me.input.l, r: me.input.r, jump: me.input.jump, duck: me.input.duck,
-            fire: me.input.fire, discard: me.input.discard, special: me.input.special,
-            aim: me.input.aim
-          };
+          ? { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, special: 0, aim: sent.aim }
+          : sent;
         if (corpse || !predMe) continue;
         predMe.input = inputHist[predTick & 255];
         S.step(predWorld);
+        recordState(predTick);
       }
     }
     updateCamera();
@@ -952,9 +954,26 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // trip late; that is the honest limit of this without rollback.
   var predWorld = null, predMe = null, predBad = 0;
   var HIPS_I = S.HIPS;
-  // Per-tick input history, so a correction can be replayed rather than guessed.
+  // Per-tick history, so a correction can be replayed rather than guessed: the
+  // input we held on each tick, and the body it produced.
   var predTick = 0, inputHist = new Array(256), sentAt = new Array(256);
+  var stateHist = new Array(256), stateTick = new Array(256);
   var rttEst = 80, predOff = null;
+  var SNAP_TICKS = 2;             // the server broadcasts every other tick
+  // Visible in the console as window.sfStats, so a player who sees the body
+  // misbehave can say which build and which numbers.
+  var sfStats = { build: 'predict-3', rtt: 0, err: 0, errMax: 0, agree: 0, fix: 0, snap: 0, resync: 0, gap: 0 };
+  window.sfStats = sfStats;
+
+  function recordState(t) {
+    var a = stateHist[t & 255];
+    if (!a) a = stateHist[t & 255] = new Float64Array(predMe.pts.length * 4);
+    for (var i = 0; i < predMe.pts.length; i++) {
+      var q = predMe.pts[i];
+      a[i * 4] = q.x; a[i * 4 + 1] = q.y; a[i * 4 + 2] = q.ox; a[i * 4 + 3] = q.oy;
+    }
+    stateTick[t & 255] = t;
+  }
   // Off unless asked for, and remembered per browser once it has been touched.
   // Flip PREDICT_DEFAULT to turn it on for everyone.
   var PREDICT_DEFAULT = false;
@@ -990,33 +1009,76 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     predMe.name = src.name; predMe.color = src.color;
     predMe.weapon = src.weapon; predMe.ammo = src.ammo; predMe.cd = src.cd;
     predMe.spin = src.spin; predMe.spray = src.spray;
-    // Reconciliation by replay.
+    // Reconciliation by comparison, then replay.
     //
-    // The snapshot is the truth, but it is the truth about a moment that has
-    // passed: it reflects our input from a round trip ago. So take it exactly —
-    // no guessing about how far ahead we ought to be — and then re-apply the
-    // inputs the server has not caught up with yet, from a per-tick history. The
-    // result lands where the player's own hands say the body should be.
+    // The snapshot is the truth about a moment that has passed, so it cannot be
+    // dropped on top of a body that has since moved. But it also cannot be used to
+    // re-derive the body from scratch every 33ms: sizing that extrapolation needs
+    // a clock, every clock here is an estimate, and an estimate that wobbles moves
+    // the body — which is what rubber banding is. Two separate attempts at
+    // estimating the round trip both wobbled, and both were felt as unplayable.
     //
-    // The round trip is measured from the acks themselves: the server echoes the
-    // sequence number of the input it applied, and we know when we sent it.
-    // Date.now(), because that is the clock sentAt is stamped with. Mixing in
-    // performance.now() here — ms since page load, against an epoch timestamp —
-    // drove rttEst to about -1.7e12, which rounded the replay down to zero ticks
-    // and quietly turned prediction off altogether.
+    // So no extrapolation. There is an exact correspondence available instead: the
+    // server applied our input sequence `ack` and has re-used it for `held` ticks
+    // since, and our sequence numbers *are* our tick numbers — so this snapshot
+    // describes our own tick ack+held. We kept what we predicted for that tick. If
+    // the two agree, the prediction was right and the body is left completely
+    // alone: nothing to smooth, nothing to yank. Only a real disagreement — a hit,
+    // a shove, a pickup, anything the local body could not know about — rewinds to
+    // the server's version and replays our inputs forward from there.
     var now = Date.now();
     var t0 = sentAt[(src.ack || 0) & 255];
-    // Only measure on a snapshot whose acked input is fresh — held for a tick or
-    // less. Inputs go out only when they change, so on any other snapshot the
-    // acked packet is up to 250ms older than the round trip; sizing the replay
-    // from that ran the body 282px a frame ahead and yanked it back. Correcting
-    // it by subtracting the held time does not work either: held is counted in
-    // server ticks and the rest in client milliseconds, and the two clocks drift
-    // enough that the estimate sagged from 84ms to 28ms between sends. A fresh
-    // ack needs no correction, and one arrives with every input.
-    if (t0 && (src.held || 0) <= 1) {
-      var sample = Math.max(0, Math.min(600, now - t0));
-      rttEst = Math.max(0, Math.min(600, rttEst * 0.7 + sample * 0.3));
+    if (t0 && (src.held || 0) <= 1) rttEst = Math.max(0, Math.min(900, rttEst * 0.7 + Math.min(900, now - t0) * 0.3));
+    sfStats.rtt = Math.round(rttEst);
+
+    var errSeen = -1;
+    var at = ((src.ack || 0) + (src.held || 0)) & 0xffff;   // the tick this describes
+    var gap = (predTick - at) & 0xffff;                     // how far we have run since
+    // If the tick it describes is *ahead* of ours, our own clock stalled — a
+    // background tab, a long frame, a garbage collection — and the subtraction has
+    // wrapped. Re-anchor instead of limping along with no usable history: that was
+    // measured as a three-second run of blind corrections on a real link.
+    if (gap > 1000) { predTick = at; gap = 0; sfStats.resync++; }
+    sfStats.gap = gap;
+    var mine = (gap <= 150 && stateTick[at & 255] === at) ? stateHist[at & 255] : null;
+
+    if (mine && !hard && !src.dead && !predMe.dead) {
+      var err = 0;
+      for (var e0 = 0; e0 < src.pts.length; e0++) {
+        var d0 = Math.abs(mine[e0 * 4] - src.pts[e0].x) + Math.abs(mine[e0 * 4 + 1] - src.pts[e0].y);
+        if (d0 > err) err = d0;
+      }
+      sfStats.err = Math.round(err);
+      if (err > sfStats.errMax) {
+        sfStats.errMax = Math.round(err);
+        // Is the disagreement the whole body being somewhere else (a timing or
+        // correspondence problem) or the body being a different shape (a physics
+        // divergence)? They need different fixes, so measure which.
+        var mx = 0, my = 0;
+        for (var m0 = 0; m0 < src.pts.length; m0++) {
+          mx += src.pts[m0].x - mine[m0 * 4]; my += src.pts[m0].y - mine[m0 * 4 + 1];
+        }
+        mx /= src.pts.length; my /= src.pts.length;
+        var shape = 0;
+        for (var m1 = 0; m1 < src.pts.length; m1++) {
+          shape = Math.max(shape, Math.abs((src.pts[m1].x - mine[m1 * 4]) - mx) +
+                                  Math.abs((src.pts[m1].y - mine[m1 * 4 + 1]) - my));
+        }
+        sfStats.errMove = Math.round(Math.abs(mx) + Math.abs(my));
+        sfStats.errShape = Math.round(shape);
+        sfStats.errGap = gap;
+      }
+      // Snapshot coordinates are whole pixels, and the correspondence can sit a
+      // tick or two out when the server's loop and ours drift, which costs a tick
+      // of travel — so the tolerance grows with speed. Being forgiving is safe:
+      // an error that is real keeps growing, and the next snapshot catches it.
+      var sp = Math.abs(predMe.pts[HIPS_I].x - predMe.pts[HIPS_I].ox) +
+               Math.abs(predMe.pts[HIPS_I].y - predMe.pts[HIPS_I].oy);
+      errSeen = err;
+      if (err <= Math.min(18, 4 + sp * 2)) { sfStats.agree++; return; }
+      sfStats.fix++;
+    } else if (!hard) {
+      sfStats.snap++;
     }
 
     // Remember where the body is being *drawn* — which includes any correction
@@ -1025,39 +1087,63 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     // never get to do its job and a knockback correction arrived in two frames.
     var wasX = [], wasY = [];
     for (var w0 = 0; w0 < predMe.pts.length; w0++) {
-      var off0 = predOff && predOff[w0] ? predOff[w0] : null;
-      wasX.push(predMe.pts[w0].x + (off0 ? off0.x : 0));
-      wasY.push(predMe.pts[w0].y + (off0 ? off0.y : 0));
+      wasX.push(predMe.pts[w0].x + (predOff ? predOff.x : 0));
+      wasY.push(predMe.pts[w0].y + (predOff ? predOff.y : 0));
     }
 
     var wasDead = predMe.dead;
     for (var c0 = 0; c0 < src.pts.length; c0++) {
       var a0 = predMe.pts[c0], b0 = src.pts[c0];
-      a0.x = b0.x; a0.y = b0.y; a0.ox = b0.ox; a0.oy = b0.oy; a0.g = b0.g;
+      // Position from the server; velocity from whichever of us knows better.
+      //
+      // The wire carries no velocity, and a decoded snapshot's ox/oy is the
+      // PREVIOUS snapshot's position — two ticks of travel, not one — so copying it
+      // in hands the body about twice its real speed and every correction
+      // overshoots. Dividing it by the snapshot interval gives a usable two-tick
+      // average, and that is the right source when something happened we could not
+      // have known about: a shove is mostly velocity, and ours would be wrong.
+      // When we agree with the server, though, our own one-tick velocity is exact,
+      // and an averaged one would smear the body's motion.
+      var trustMine = mine && errSeen >= 0 && errSeen < 14;
+      var vx0 = trustMine ? mine[c0 * 4] - mine[c0 * 4 + 2] : (b0.x - b0.ox) / SNAP_TICKS;
+      var vy0 = trustMine ? mine[c0 * 4 + 1] - mine[c0 * 4 + 3] : (b0.y - b0.oy) / SNAP_TICKS;
+      a0.x = b0.x; a0.y = b0.y; a0.g = b0.g;
+      a0.ox = b0.x - vx0; a0.oy = b0.y - vy0;
     }
     predMe.dead = src.dead; predMe.respawn = src.respawn; predMe.flail = src.flail;
     if (src.dead) { predOff = null; return; }      // a corpse is drawn as the server has it
 
     if (!src.dead) {
-      // Half the round trip, not all of it: the snapshot already contains every
-      // tick the server ran before sending it, so the only gap left to cover is
-      // the trip down to us.
-      var ticks = Math.max(0, Math.min(20, Math.round((rttEst / 2) / (1000 / 60))));
+      // Replay our own inputs from the tick the snapshot describes up to now. The
+      // length comes from the tick numbers, not from a latency estimate, so there
+      // is nothing left to wobble.
+      var ticks = Math.min(gap, 90);
       for (var r0 = ticks; r0 >= 1; r0--) {
-        var hist = inputHist[(predTick - r0 + 1) & 255];
+        var t1 = (predTick - r0 + 1) & 0xffff;
+        var hist = inputHist[t1 & 255];
         if (hist) predMe.input = hist;
         S.step(predWorld);
+        recordState(t1);
       }
     }
 
-    // whatever is left after replaying is genuine correction: slide it in
-    predOff = [];
-    var far = 0;
+    // Whatever is left after replaying is genuine correction: slide it in — but as
+    // ONE offset for the whole body, not one per point.
+    //
+    // Per-point offsets were the stretching. A correction is rarely the same size
+    // at every joint, and each offset eased out at its own capped rate, so for the
+    // twenty-odd frames a big correction takes to disappear the body was drawn
+    // with its joints displaced by different amounts: a stickman pulled long.
+    // Splitting the correction into a translation and a shape fixes it. The
+    // translation is what a player would notice being wrong, so it eases; the
+    // shape is small and local, so it is simply taken.
+    var sumX = 0, sumY = 0;
     for (var o0 = 0; o0 < predMe.pts.length; o0++) {
-      var ox0 = wasX[o0] - predMe.pts[o0].x, oy0 = wasY[o0] - predMe.pts[o0].y;
-      far = Math.max(far, Math.abs(ox0) + Math.abs(oy0));
-      predOff.push({ x: ox0, y: oy0 });
+      sumX += wasX[o0] - predMe.pts[o0].x;
+      sumY += wasY[o0] - predMe.pts[o0].y;
     }
+    predOff = { x: sumX / predMe.pts.length, y: sumY / predMe.pts.length };
+    var far = Math.abs(predOff.x) + Math.abs(predOff.y);
     // A respawn moves you across the map, and smoothing it would draw the body
     // gliding through the scenery. Detect it properly — coming back from dead —
     // rather than by distance, because a hard knockback at high latency covers
@@ -1068,27 +1154,21 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // The visual offset decays every frame, so a correction is a short glide rather
   // than a step. It only moves the drawing; the simulation stays authoritative.
   function predOffset(i) {
-    if (!predOff || !predOff[i]) return null;
-    return predOff[i];
+    return predOff;                 // one rigid offset, so the body cannot stretch
   }
   function predOffsetDecay() {
     if (!predOff) return;
-    var alive = false;
-    for (var i = 0; i < predOff.length; i++) {
-      var o = predOff[i];
-      // Percentage decay alone reveals a big correction too fast: 18% of the
-      // hundred-odd pixels a sword adds is still a visible lurch. Cap the reveal
-      // per frame so even a violent correction arrives as motion, not a step.
-      for (var ax = 0; ax < 2; ax++) {
-        var key = ax ? 'y' : 'x';
-        var v = o[key];
-        if (!v) continue;
-        var step = Math.min(Math.max(Math.abs(v) * 0.13, 0.5), 4.5);
-        o[key] = Math.abs(v) <= step ? 0 : v - (v > 0 ? step : -step);
-      }
-      if (Math.abs(o.x) > 0.3 || Math.abs(o.y) > 0.3) alive = true;
+    // Percentage decay alone reveals a big correction too fast: 18% of the
+    // hundred-odd pixels a sword adds is still a visible lurch. Cap the reveal
+    // per frame so even a violent correction arrives as motion, not a step.
+    for (var ax = 0; ax < 2; ax++) {
+      var key = ax ? 'y' : 'x';
+      var v = predOff[key];
+      if (!v) continue;
+      var step = Math.min(Math.max(Math.abs(v) * 0.13, 0.5), 4.5);
+      predOff[key] = Math.abs(v) <= step ? 0 : v - (v > 0 ? step : -step);
     }
-    if (!alive) predOff = null;
+    if (Math.abs(predOff.x) < 0.3 && Math.abs(predOff.y) < 0.3) predOff = null;
   }
 
   // ---- multiplayer ---------------------------------------------------------
@@ -1289,8 +1369,24 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // degrees and rate-limited to 10Hz, which no one can feel, plus a 4Hz keepalive
   // so the server never thinks we went quiet.
   var lastBits = -1, lastAim = null, lastSentAt = 0, pendingFire = false;
-  setInterval(function () {
-    if (mode !== 'online' || !ws || ws.readyState !== 1 || !me) return;
+  var lastSent = { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, special: 0, aim: 0 };
+
+  // Called once per predicted tick, and returns the input the server will be
+  // acting on for that tick — which is the whole point.
+  //
+  // Predicting with the input actually held, rather than the input actually sent,
+  // was the bug behind both complaints. Sending was on its own 50ms timer, so the
+  // server's timeline was a coarser version of ours and the two simulations were
+  // never running the same thing: the shape of the body disagreed by 27px while
+  // simply walking undisturbed, on every snapshot, forever. That is a correction
+  // that can never succeed — visible as endless rubber banding, and as a stretched
+  // stickman once each joint eased its own share of it out.
+  //
+  // So the timeline is defined here: a change is sent on the tick it happens, and
+  // on any tick where nothing is sent, the server is still re-using the last
+  // packet — which is exactly what gets recorded and predicted with.
+  function sendInput(t) {
+    if (mode !== 'online' || !ws || ws.readyState !== 1 || !me) return lastSent;
     var i = me.input;
     var fire = (i.fire || pendingFire) ? 1 : 0;
     var bits = (i.l ? 1 : 0) | (i.r ? 2 : 0) | (i.jump ? 4 : 0) | (i.duck ? 8 : 0) |
@@ -1298,16 +1394,19 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     var aimQ = Math.round(i.aim * 16) / 16;
     var now = Date.now();
     var since = now - lastSentAt;
-    var bitsChanged = bits !== lastBits;
+    // Buttons go up the instant they change, because a late jump is a death. Aim
+    // slides continuously, so it is quantised to ~3.6 degrees and rate-limited;
+    // the keepalive keeps the server's idea of us fresh.
     var aimDue = aimQ !== lastAim && since >= 100;
-    if (!bitsChanged && !aimDue && since < 250) return;
+    if (bits === lastBits && !aimDue && since < 250) return lastSent;
     lastBits = bits; lastAim = aimQ; lastSentAt = now; pendingFire = false;
-    sentAt[predTick & 255] = now;
-    ws.send(Wire.encodeInput({
-      l: i.l, r: i.r, jump: i.jump, duck: i.duck, fire: fire, discard: i.discard,
-      special: i.special, aim: aimQ
-    }, predTick));
-  }, 50);
+    lastSent = { l: i.l ? 1 : 0, r: i.r ? 1 : 0, jump: i.jump ? 1 : 0, duck: i.duck ? 1 : 0,
+                 fire: fire, discard: i.discard ? 1 : 0, special: i.special ? 1 : 0, aim: aimQ };
+    sentAt[t & 255] = now;
+    sfStats.sentSeq = t;
+    ws.send(Wire.encodeInput(lastSent, t));
+    return lastSent;
+  }
 
   window.addEventListener('resize', sizeCanvas);
   sizeCanvas();

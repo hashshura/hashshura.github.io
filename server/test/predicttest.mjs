@@ -34,12 +34,33 @@ const makeState = () => { const m=new Map(); return { storage:{ async get(k){ret
 const { Room } = await import('../src/room.js');
 const rooms = new Map();
 const env = { LOBBY:{ idFromName:()=>'g', get:()=>({ fetch: async()=>new Res('{}') }) } };
-env.ROOM = { idFromName:(n)=>n, get:(n)=>({ fetch:(u,i)=>{ if(!rooms.has(n)) rooms.set(n,new Room(makeState(),env));
+// The room must not drive itself. Its loop is a self-scheduling setTimeout on the
+// real timer queue, and the awaits in this harness give it chances to fire, so it
+// ticked on top of the ticks driven here — the server ran 23 ticks where the client
+// ran 15, and that mismatch alone produces a divergence no correction can fix. It
+// looked exactly like a netcode bug. The harness drives every tick, or none.
+const makeRoom = () => { const r = new Room(makeState(), env); r.startLoop = () => {}; return r; };
+env.ROOM = { idFromName:(n)=>n, get:(n)=>({ fetch:(u,i)=>{ if(!rooms.has(n)) rooms.set(n,makeRoom());
   return rooms.get(n).fetch(new Req(typeof u==='string'?u:u.url, i)); } }) };
 
 const LATENCY = Number(process.env.SF_LAT || 60);   // one way
+const JITTER = Number(process.env.SF_JITTER || 0);  // added, randomly, per message
+// Server ticks per client frame. A Durable Object's loop is a self-scheduling
+// setTimeout, not a metronome, and a browser's rAF is its own clock — so the two
+// simulations do not advance in lockstep the way an in-process test does.
+const DRIFT = Number(process.env.SF_DRIFT || 1);
+let seed = 12345;
+const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
 const pending = [];
-const deliver = (fn) => pending.push({ at: clock + LATENCY, fn });
+// Ordering is preserved per direction — this is a WebSocket, not UDP — but the two
+// directions are independent. Forcing one shared monotonic clock across both let
+// the scheduled times run away from the clock under jitter, and nothing arrived.
+const lastAt = { up: 0, down: 0 };
+const deliver = (fn, ch = 'down') => {
+  const at = Math.max(lastAt[ch], clock + LATENCY + (JITTER ? rnd() * JITTER : 0));
+  lastAt[ch] = at;
+  pending.push({ at, fn });
+};
 function pump() { for (let i = pending.length - 1; i >= 0; i--) {
   if (pending[i].at <= clock) { const p = pending.splice(i,1)[0]; p.fn(); } } }
 
@@ -65,7 +86,7 @@ globalThis.WebSocket = class {
         sock.addEventListener('message', (ev) => deliver(() => this.onmessage && this.onmessage(ev)));
         this.readyState = 1; deliver(() => this.onopen && this.onopen({})); });
   }
-  send(d) { const s = this._s; deliver(() => s && s.send(d)); }
+  send(d) { const s = this._s; deliver(() => s && s.send(d), 'up'); }
   close() {}
 };
 
@@ -78,6 +99,7 @@ padEl.getBoundingClientRect = () => ({left:0,top:0,width:190,height:170});
 const nodes = { 'sf-canvas':canvas, 'sf-aimpad':aimpad, 'sf-pad':padEl };
 const stub = (id) => nodes[id] || (nodes[id] = el('div'));
 let clock = 1000;
+let serverAcc = 0;
 const RealDate = Date;
 globalThis.Date = new Proxy(RealDate, {
   apply: (t, self, a) => new RealDate(...a),
@@ -103,10 +125,22 @@ const room = () => rooms.get('TEST');
 // The client's join path is promise-based, so the microtask queue has to drain
 // between frames; a synchronous loop would never run a single .then().
 const run = async (n) => { for (let i = 0; i < n; i++) { tick(); await new Promise((r) => setImmediate(r)); } };
-function tick() {                       // one 16.7ms slice of wall clock
-  clock += 16.7;
+// How much a client frame varies from 16.7ms, and how often the server's loop
+// stalls and then catches up in a burst.
+const FRAME_VAR = Number(process.env.SF_FRAMEVAR || 0);
+const STALL = Number(process.env.SF_STALL || 0);
+let stallLeft = 0, burstLeft = 0, frames = 0;
+function tick() {                       // one slice of wall clock
+  clock += 16.7 * (1 + (FRAME_VAR ? (rnd() - 0.5) * 2 * FRAME_VAR : 0));
+  frames++;
+  if (STALL && frames % 120 === 0) { stallLeft = STALL; burstLeft = STALL; }
   pump();
-  if (room() && room().world) room().tick();
+  if (stallLeft > 0) { stallLeft--; }            // the room's loop is not running
+  else {
+    serverAcc += DRIFT;
+    if (burstLeft > 0) { serverAcc += 1; burstLeft--; }   // then it catches up
+    while (serverAcc >= 1) { serverAcc -= 1; if (room() && room().world) room().tick(); }
+  }
   intervals.forEach((fn) => fn());
   const f = raf; raf = []; f.forEach((fn) => fn(clock));
 }
@@ -121,10 +155,14 @@ console.log('  debug: note=' + JSON.stringify(nodes['sf-note'].textContent),
             '| snapshots seen by client=' + (worlds.length > 1 ? Object.keys(worlds[1].players).length + ' players decoded' : 'n/a'));
 ok('joined the room over a 120ms link', !!room() && room().conns.size === 1);
 
-// the predicted body is the client's second world
-const predWorld = worlds[worlds.length-1];
-const pred = predWorld && predWorld.players['local'];
+// The predicted body lives in whichever world holds a player called 'local'. Wait
+// for it rather than assuming a fixed number of frames is enough: under server
+// stalls the join takes longer, and a fixed wait turned that into a crash here.
+const findPred = () => { for (let i = worlds.length - 1; i >= 0; i--) if (worlds[i].players['local']) return worlds[i].players['local']; return null; };
+for (let i = 0; i < 400 && !findPred(); i++) { tick(); await new Promise((r) => setImmediate(r)); }
+const pred = findPred();
 ok('prediction is running', !!pred);
+if (!pred) process.exit(1);
 
 // press right and watch how fast the LOCAL body moves versus the server's
 const srvId = room().conns.get([...room().conns.keys()][0]).id;
@@ -165,11 +203,30 @@ for (let i = 0; i < 360; i++) {
     worstY = Math.max(worstY, Math.abs(pred.pts[StickSim.HIPS].y - sv.y)); }
 }
 release();
+// The one the hips metric could never see: a correction applied per joint drew
+// the body with its joints displaced by different amounts — a stickman pulled
+// long. Compare each drawn bone against the same bone in the simulation.
+const BONES = [[StickSim.HEAD, StickSim.CHEST], [StickSim.CHEST, StickSim.HIPS],
+               [StickSim.CHEST, StickSim.HANDL], [StickSim.CHEST, StickSim.HANDR],
+               [StickSim.HIPS, StickSim.FOOTL], [StickSim.HIPS, StickSim.FOOTR]];
+const worstStretch = () => {
+  let w = 0;
+  for (const [a, b] of BONES) {
+    const pa = pred.pts[a], pb = pred.pts[b];
+    if (pa.dx === undefined || pb.dx === undefined) continue;
+    const sim = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+    const draw = Math.hypot(pa.dx - pb.dx, pa.dy - pb.dy);
+    w = Math.max(w, Math.abs(draw - sim));
+  }
+  return w;
+};
+let stretch = 0;
 const dhip = () => { const q = pred.pts[StickSim.HIPS];
   return { x: q.dx !== undefined ? q.dx : q.x, y: q.dy !== undefined ? q.dy : q.y }; };
 // The actual complaint: does the body visibly jump? Measure the largest
 // single-frame movement while walking. A run is ~4.4px per frame, so anything
 // much beyond that is a correction the player sees as a teleport.
+window.sfStats.errMax = 0;
 let worstJump = 0, jumps = 0;
 let last = dhip().x, lastY = dhip().y;
 for (let i = 0; i < 300; i++) {
@@ -178,11 +235,47 @@ for (let i = 0; i < 300; i++) {
   tick(); await new Promise((r) => setImmediate(r));
   const d = Math.abs(dhip().x - last) + Math.abs(dhip().y - lastY);
   last = dhip().x; lastY = dhip().y;
+  stretch = Math.max(stretch, worstStretch());
   if (i > 30) { worstJump = Math.max(worstJump, d); if (d > 10) jumps++; }
 }
 release();
 ok('the local body never teleports', worstJump < 10,
    'worst single-frame move ' + worstJump.toFixed(1) + 'px, ' + jumps + ' frames over 10px');
+// The honest correctness measure, and the one the client computes itself: how far
+// the state predicted for a tick sits from the state the server reports for that
+// same tick. Undisturbed, that should be near zero. During a hit the client is
+// *supposed* to disagree, so folding that in would make the number meaningless.
+// Run-length compare the two input timelines: how many ticks each side spent on
+// each packet. If they differ, the two simulations were never running the same
+// thing and no correction can ever succeed.
+if (process.env.SF_TIMELINE) {
+  const srvRuns = [], cliRuns = [];
+  const rl = (arr, seq) => { const last = arr[arr.length - 1];
+    if (last && last.seq === seq) last.n++; else arr.push({ seq, n: 1 }); };
+  const conn = room().conns.get([...room().conns.keys()][0]);
+  const realTick = room().tick.bind(room());
+  room().tick = function () { realTick(); rl(srvRuns, conn.ack); };
+  let seen = -1;
+  const probe = setInterval(() => {}, 1000);
+  for (let i = 0; i < 120; i++) {
+    press(i % 40 < 20 ? 175 : 20);
+    tick(); await new Promise((r) => setImmediate(r));
+    rl(cliRuns, window.sfStats.sentSeq);
+  }
+  clearInterval(probe);
+  console.log('  server ran: ' + srvRuns.slice(-8).map(r => r.seq + 'x' + r.n).join(' '));
+  console.log('  client ran: ' + cliRuns.slice(-8).map(r => r.seq + 'x' + r.n).join(' '));
+}
+console.log('  walking stats: ' + JSON.stringify(window.sfStats));
+// The tight bound is the claim for ordinary play. Under deliberately hostile
+// conditions — heavy jitter, a server freezing for a third of a second — the
+// prediction is genuinely wrong more often, and the claim that still has to hold
+// is the one above and below: whatever the disagreement, the body on screen does
+// not teleport and does not stretch.
+const HOSTILE = JITTER > 40 || STALL > 12 || DRIFT > 1.02;
+ok('the prediction agrees with the server about the same moment, walking undisturbed',
+   window.sfStats.errMax < (HOSTILE ? 80 : 22), 'worst same-tick error ' + window.sfStats.errMax + 'px, ' +
+   window.sfStats.fix + ' corrections vs ' + window.sfStats.agree + ' agreements');
 
 // Jumping: the server starts the jump a round trip after we do, so for that
 // window the two bodies are at genuinely different heights.
@@ -194,6 +287,7 @@ for (let i = 0; i < 300; i++) {
   tick(); await new Promise((r) => setImmediate(r));
   const d = Math.abs(dhip().x - lx) + Math.abs(dhip().y - ly);
   lx = dhip().x; ly = dhip().y;
+  stretch = Math.max(stretch, worstStretch());
   if (i > 20) worstAir = Math.max(worstAir, d);
 }
 release();
@@ -203,9 +297,15 @@ ok('jumping does not teleport the body', worstAir < 16,
 // Being hit: the server knocks us sideways; the client cannot have predicted it.
 const sbody = room().world.players[srvId];
 StickSim.step(room().world);
-sbody.pts.forEach((q) => { q.ox += 9; q.oy += 4; });     // a sword's shove
+// Local, not uniform: a blade lands on the chest and the feet barely move. A
+// uniform shove is a translation, which even a per-joint correction reproduces
+// faithfully — it is the lopsided one that draws the body long.
+sbody.pts.forEach((q, i) => {
+  const share = i === StickSim.FOOTL || i === StickSim.FOOTR ? 0.1 : 1;
+  q.ox += 14 * share; q.oy += 6 * share;
+});
 sbody.flail = 26;
-let worstHit = 0, worstHitServer = 0;
+let worstHit = 0, worstHitServer = 0, hitStretch = 0;
 let sx = sbody.pts[StickSim.HIPS].x, sy = sbody.pts[StickSim.HIPS].y;
 lx = pred.pts[StickSim.HIPS].dx !== undefined ? pred.pts[StickSim.HIPS].dx : pred.pts[StickSim.HIPS].x;
 ly = pred.pts[StickSim.HIPS].dy !== undefined ? pred.pts[StickSim.HIPS].dy : pred.pts[StickSim.HIPS].y;
@@ -219,6 +319,7 @@ for (let i = 0; i < 90; i++) {
   // the same body on the server: pure physics, no corrections. If the client is
   // not adding jumps, its worst frame should look like the server's worst frame.
   const sv = room().world.players[srvId].pts[StickSim.HIPS];
+  hitStretch = Math.max(hitStretch, worstStretch());
   worstHitServer = Math.max(worstHitServer, Math.abs(sv.x - sx) + Math.abs(sv.y - sy));
   sx = sv.x; sy = sv.y;
 }
@@ -230,7 +331,16 @@ ok('a hit moves the drawn body no harder than physics moves it on the server',
    worstHit <= worstHitServer * 1.4 + 4 + LATENCY * 0.045,
    'client ' + worstHit.toFixed(1) + 'px vs server ' + worstHitServer.toFixed(1) + 'px in the worst frame');
 
-ok('gap stays within what latency explains', worstX < 25 + LATENCY * 0.35, 'worst horizontal gap ' + worstX.toFixed(0) + 'px over ' + samples + ' samples');
+// The honest correctness measure, and the one the client itself computes: how far
+// the state we predicted for a tick sits from the state the server reports for
+// that same tick. Comparing against the server's *live* body instead measures
+// inherent turn lag — the server has not heard about a direction change yet — so
+// a weaker prediction scores better on it, which is how a bad metric misleads.
+ok('no bone is drawn longer than the simulation says it is', Math.max(stretch, hitStretch) < 2,
+   'worst drawn-vs-simulated bone difference ' + Math.max(stretch, hitStretch).toFixed(1) +
+   'px (walking ' + stretch.toFixed(1) + ', taking a hit ' + hitStretch.toFixed(1) + ')');
+ok('and does not run away from the server', worstX < 140,
+   'worst gap to the live server body ' + worstX.toFixed(0) + 'px over ' + samples + ' samples');
 ok('no vertical desync', worstY < 40, 'worst vertical gap ' + worstY.toFixed(0) + 'px');
 // Death and respawn: the server picks a spawn point with its own random state,
 // and if the local prediction respawns too it picks a different one — so the body
@@ -256,6 +366,7 @@ for (let i = 0; i < 320; i++) {
 }
 ok('the test actually killed and respawned him', sbody2.deaths > 0 && !sbody2.dead,
    'deaths=' + sbody2.deaths + ' dead=' + sbody2.dead + ' hp=' + sbody2.hp);
+console.log('  stats: ' + JSON.stringify(window.sfStats));
 ok('the respawned body does not flick between spawn points', flicks === 0,
    flicks + ' unexplained jump(s), worst ' + worstDeath.toFixed(0) + 'px, ' + positions.size + ' distinct places');
 // Toggle lag compensation off, move around, then back on. The tick counter and
@@ -285,7 +396,7 @@ const drawn = () => { const q = live().pts[StickSim.HIPS];
 let tx = drawn().x, ty = drawn().y;
 const startX = tx; let travelled = 0;
 for (let i = 0; i < 90; i++) {
-  if (i % 18 === 0) walk(i % 36 === 0 ? 1 : -1);
+  if (i % 30 === 0) walk(i % 60 === 0 ? 1 : -1);
   tick(); await new Promise((r) => setImmediate(r));
   const h = drawn();
   const moved = Math.abs(h.x - tx) + Math.abs(h.y - ty);
