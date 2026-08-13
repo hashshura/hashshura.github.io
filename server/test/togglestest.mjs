@@ -31,7 +31,11 @@ const ok = (l,c,x='') => console.log((c?'  ok   ':'  FAIL ')+l+(x?'  '+x:''));
 
 const L = listeners.get(box) || {};
 ok('switch found and wired', !!(L.change||[]).length, Object.keys(L).join(','));
-ok('defaults to on', box.checked === true);
+// Ships off: prediction is worth having, but a wrong prediction is worse than a
+// late one, so it is opt-in until someone asks for it.
+ok('defaults to off', box.checked === false);
+ok('the markup agrees with the script', fs.readFileSync('../../_posts/2026-08-12-stick-fight.md','utf8')
+   .indexOf('id="sf-lagcomp" checked') === -1);
 box.checked = false;
 (L.change||[]).forEach(fn=>fn({}));
 ok('turning it off is remembered', store.sf_predict === '0', JSON.stringify(store));

@@ -55,7 +55,7 @@
         }
       }
       keys[s] = need;
-      sizes += 9 + (need ? PTS * 4 : PTS * 2);   // +2 for the acked input seq
+      sizes += 10 + (need ? PTS * 4 : PTS * 2);  // +2 acked input seq, +1 ticks held
     }
 
     var bullets = world.bullets.length > 40 ? world.bullets.slice(0, 40) : world.bullets;
@@ -86,6 +86,12 @@
       dv.setUint8(o, Math.min(255, p.cd)); o += 1;
       dv.setInt16(o, Math.round(p.aim * 10000)); o += 2;
       dv.setUint16(o, (p.ack || 0) & 0xffff); o += 2;
+      // How many ticks ago the server applied that input. Without it the client
+      // cannot tell a slow link from an input it simply has not replaced yet:
+      // inputs go out only when they change, so "time since the acked packet was
+      // created" runs up to 250ms longer than the round trip, and a replay sized
+      // from that estimate sprints ahead and gets yanked back every snapshot.
+      dv.setUint8(o, Math.max(0, Math.min(255, p.held | 0))); o += 1;
 
       if (!base.pos[s]) base.pos[s] = new Int16Array(PTS * 2);
       var bp = base.pos[s];
@@ -156,6 +162,7 @@
       var cd = dv.getUint8(o); o += 1;
       var aim = dv.getInt16(o) / 10000; o += 2;
       var ack = dv.getUint16(o); o += 2;
+      var held = dv.getUint8(o); o += 1;
       var key = !!(keyMask & (1 << s));
 
       var id = info ? info.id : 'slot' + s;
@@ -166,7 +173,7 @@
       seen[id] = 1;
       p.hp = hp; p.kills = kills; p.deaths = deaths;
       p.weapon = WEAPON_NAME[wa >> 6]; p.ammo = (wa >> 1) & 31; p.dead = !!(wa & 1);
-      p.cd = cd; p.aim = aim; p.ack = ack;
+      p.cd = cd; p.aim = aim; p.ack = ack; p.held = held;
 
       for (var k = 0; k < PTS; k++) {
         var q = p.pts[k];

@@ -109,7 +109,7 @@ export class Room {
     const id = 'p' + (this.nextId++);
     this.slots[slot] = id;
     S.addPlayer(this.world, id, name, slot);
-    this.conns.set(ws, { slot, id, name, color: slot, seenAt: Date.now(), q: [], ack: 0 });
+    this.conns.set(ws, { slot, id, name, color: slot, seenAt: Date.now(), q: [], ack: 0, ackTick: 0 });
 
     ws.addEventListener('message', (ev) => {
       const c = this.conns.get(ws);
@@ -198,8 +198,12 @@ export class Room {
         p.input.discard = inp.discard; p.input.special = inp.special;
         p.input.aim = inp.aim;
         c.ack = inp.seq;
+        c.ackTick = this.world.t;
       }
       p.ack = c.ack;             // travels in the snapshot, so the client can replay
+      // and how long we have been re-using it, so the client's round-trip estimate
+      // is not inflated by its own send throttling
+      p.held = Math.min(255, this.world.t - (c.ackTick || 0));
     }
 
     S.step(this.world);

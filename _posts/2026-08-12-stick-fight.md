@@ -156,9 +156,9 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 </div>
 
 <p id="sf-opts">
-  <label><input type="checkbox" id="sf-lagcomp" checked> client-side lag compensation</label>
+  <label><input type="checkbox" id="sf-lagcomp"> client-side lag compensation</label>
   <span id="sf-lagsim" hidden></span>
-  <span id="sf-lagcomp-note">your own stickman answers instantly and the server corrects it — turn off to see raw server latency</span>
+  <span id="sf-lagcomp-note">turn on and your own stickman answers instantly, with the server correcting it — off, every move waits for the round trip</span>
 </p>
 
 <p id="sf-help">
@@ -839,29 +839,36 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         for (var b = 0; b < bots.length; b++) botThink(world, bots[b], world.t);
         S.step(world);
         checkWin();
-      } else if (mode === 'online' && me && predMe) {
+      } else if (mode === 'online' && me) {
         gatherInput(me);
-        // A corpse is not predicted. The simulation respawns from its own random
-        // state, so a local copy picks a different spawn point than the server and
-        // the body flicks between them — measured at 901px across five places.
-        // While dead, mirror the server and nothing else.
+        // The tick counter and the input history number the packets the server
+        // acks, so they advance whether or not prediction is running. Freezing
+        // them while lag compensation was switched off sent every input under one
+        // sequence number, and switching back on replayed a history recorded
+        // before the switch: the body lurched up to 77px a frame, unplayable.
+        //
+        // A corpse is not predicted either. The simulation respawns from its own
+        // random state, so a local copy picks a different spawn point than the
+        // server and the body flicks between the two.
         predTick = (predTick + 1) & 0xffff;
-        var dead = predMe.dead;
-        inputHist[predTick & 255] = dead
-          // a blank entry, so a replay reaching back across the death does not
-          // re-apply whatever was held down when it happened
+        // Recorded even while prediction is off, because the server is applying
+        // these inputs regardless — so a replay after the switch reproduces what
+        // actually happened. Only a corpse records blanks.
+        var corpse = !!(predMe && predMe.dead);
+        inputHist[predTick & 255] = corpse
+          // a blank entry, so a replay reaching back across the death — or across
+          // the switch — does not re-apply whatever was held down back then
           ? { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, special: 0, aim: me.input.aim }
           : {
             l: me.input.l, r: me.input.r, jump: me.input.jump, duck: me.input.duck,
             fire: me.input.fire, discard: me.input.discard, special: me.input.special,
             aim: me.input.aim
           };
-        if (dead) continue;
+        if (corpse || !predMe) continue;
         predMe.input = inputHist[predTick & 255];
         S.step(predWorld);
       }
     }
-    if (mode === 'online' && me && !predMe) gatherInput(me);
     updateCamera();
     predOffsetDecay();
     // Snapshots land at 20Hz, so draw part-way between the last two rather than
@@ -948,10 +955,14 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // Per-tick input history, so a correction can be replayed rather than guessed.
   var predTick = 0, inputHist = new Array(256), sentAt = new Array(256);
   var rttEst = 80, predOff = null;
-  // Escape hatch: localStorage.setItem('sf_predict','0') and reload turns
-  // prediction off, so it can be ruled in or out from the console in seconds.
-  var PREDICT = true;
-  try { PREDICT = localStorage.getItem('sf_predict') !== '0'; } catch (e) {}
+  // Off unless asked for, and remembered per browser once it has been touched.
+  // Flip PREDICT_DEFAULT to turn it on for everyone.
+  var PREDICT_DEFAULT = false;
+  var PREDICT = PREDICT_DEFAULT;
+  try {
+    var saved = localStorage.getItem('sf_predict');
+    if (saved !== null) PREDICT = saved !== '0';
+  } catch (e) {}
   var lagBox = document.getElementById('sf-lagcomp');
   var lagSim = document.getElementById('sf-lagsim');
   if (lagBox) {
@@ -995,7 +1006,15 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     // and quietly turned prediction off altogether.
     var now = Date.now();
     var t0 = sentAt[(src.ack || 0) & 255];
-    if (t0) {
+    // Only measure on a snapshot whose acked input is fresh — held for a tick or
+    // less. Inputs go out only when they change, so on any other snapshot the
+    // acked packet is up to 250ms older than the round trip; sizing the replay
+    // from that ran the body 282px a frame ahead and yanked it back. Correcting
+    // it by subtracting the held time does not work either: held is counted in
+    // server ticks and the rest in client milliseconds, and the two clocks drift
+    // enough that the estimate sagged from 84ms to 28ms between sends. A fresh
+    // ack needs no correction, and one arrives with every input.
+    if (t0 && (src.held || 0) <= 1) {
       var sample = Math.max(0, Math.min(600, now - t0));
       rttEst = Math.max(0, Math.min(600, rttEst * 0.7 + sample * 0.3));
     }
@@ -1020,7 +1039,10 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     if (src.dead) { predOff = null; return; }      // a corpse is drawn as the server has it
 
     if (!src.dead) {
-      var ticks = Math.max(0, Math.min(40, Math.round(rttEst / (1000 / 60))));
+      // Half the round trip, not all of it: the snapshot already contains every
+      // tick the server ran before sending it, so the only gap left to cover is
+      // the trip down to us.
+      var ticks = Math.max(0, Math.min(20, Math.round((rttEst / 2) / (1000 / 60))));
       for (var r0 = ticks; r0 >= 1; r0--) {
         var hist = inputHist[(predTick - r0 + 1) & 255];
         if (hist) predMe.input = hist;

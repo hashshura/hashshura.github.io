@@ -78,6 +78,12 @@ padEl.getBoundingClientRect = () => ({left:0,top:0,width:190,height:170});
 const nodes = { 'sf-canvas':canvas, 'sf-aimpad':aimpad, 'sf-pad':padEl };
 const stub = (id) => nodes[id] || (nodes[id] = el('div'));
 let clock = 1000;
+const RealDate = Date;
+globalThis.Date = new Proxy(RealDate, {
+  apply: (t, self, a) => new RealDate(...a),
+  construct: (t, a) => (a.length ? new RealDate(...a) : new RealDate(clock)),
+  get: (t, k) => (k === 'now' ? () => clock : RealDate[k])
+});
 const intervals = [];
 globalThis.setInterval = (fn) => { intervals.push(fn); return 1; };
 let raf = [];
@@ -85,7 +91,7 @@ globalThis.requestAnimationFrame = (fn) => raf.push(fn);
 globalThis.window = { StickSim, StickWire, innerHeight:900, addEventListener(){},
   performance: { now: () => clock }, prompt: () => '', location: { pathname:'/x' } };
 globalThis.document = { getElementById: stub, createElement: el, addEventListener(){}, querySelector: ()=>el('i') };
-globalThis.localStorage = { s:{ sf_server: NET }, getItem(k){ return k in this.s ? this.s[k] : null; }, setItem(){} };
+globalThis.localStorage = { s:{ sf_server: NET, sf_predict: '1' }, getItem(k){ return k in this.s ? this.s[k] : null; }, setItem(){} };
 const worlds = [];
 const realCreate = StickSim.createWorld;
 StickSim.createWorld = function (seed) { const w = realCreate(seed); worlds.push(w); return w; };
@@ -159,17 +165,19 @@ for (let i = 0; i < 360; i++) {
     worstY = Math.max(worstY, Math.abs(pred.pts[StickSim.HIPS].y - sv.y)); }
 }
 release();
+const dhip = () => { const q = pred.pts[StickSim.HIPS];
+  return { x: q.dx !== undefined ? q.dx : q.x, y: q.dy !== undefined ? q.dy : q.y }; };
 // The actual complaint: does the body visibly jump? Measure the largest
 // single-frame movement while walking. A run is ~4.4px per frame, so anything
 // much beyond that is a correction the player sees as a teleport.
 let worstJump = 0, jumps = 0;
-let last = pred.pts[StickSim.HIPS].x, lastY = pred.pts[StickSim.HIPS].y;
+let last = dhip().x, lastY = dhip().y;
 for (let i = 0; i < 300; i++) {
   const px = pred.pts[StickSim.HIPS].x;
   press(px > deck.x + deck.w - 130 ? 20 : (px < deck.x + 130 ? 175 : (i % 120 < 60 ? 175 : 20)));
   tick(); await new Promise((r) => setImmediate(r));
-  const d = Math.abs(pred.pts[StickSim.HIPS].x - last) + Math.abs(pred.pts[StickSim.HIPS].y - lastY);
-  last = pred.pts[StickSim.HIPS].x; lastY = pred.pts[StickSim.HIPS].y;
+  const d = Math.abs(dhip().x - last) + Math.abs(dhip().y - lastY);
+  last = dhip().x; lastY = dhip().y;
   if (i > 30) { worstJump = Math.max(worstJump, d); if (d > 10) jumps++; }
 }
 release();
@@ -179,13 +187,13 @@ ok('the local body never teleports', worstJump < 10,
 // Jumping: the server starts the jump a round trip after we do, so for that
 // window the two bodies are at genuinely different heights.
 let worstAir = 0;
-let ly = pred.pts[StickSim.HIPS].y, lx = pred.pts[StickSim.HIPS].x;
+let ly = dhip().y, lx = dhip().x;
 for (let i = 0; i < 300; i++) {
   press(i % 90 < 8 ? 95 : (i % 40 < 20 ? 175 : 20));      // up, then left/right
   if (i % 90 === 8) release();
   tick(); await new Promise((r) => setImmediate(r));
-  const d = Math.abs(pred.pts[StickSim.HIPS].x - lx) + Math.abs(pred.pts[StickSim.HIPS].y - ly);
-  lx = pred.pts[StickSim.HIPS].x; ly = pred.pts[StickSim.HIPS].y;
+  const d = Math.abs(dhip().x - lx) + Math.abs(dhip().y - ly);
+  lx = dhip().x; ly = dhip().y;
   if (i > 20) worstAir = Math.max(worstAir, d);
 }
 release();
@@ -250,4 +258,46 @@ ok('the test actually killed and respawned him', sbody2.deaths > 0 && !sbody2.de
    'deaths=' + sbody2.deaths + ' dead=' + sbody2.dead + ' hp=' + sbody2.hp);
 ok('the respawned body does not flick between spawn points', flicks === 0,
    flicks + ' unexplained jump(s), worst ' + worstDeath.toFixed(0) + 'px, ' + positions.size + ' distinct places');
+// Toggle lag compensation off, move around, then back on. The tick counter and
+// the input history number the packets the server acks, so freezing them while
+// the toggle is off used to mean every packet went out under the same sequence
+// number, and switching back on replayed a history recorded before the switch.
+const fire = (id, type) => ((listeners.get(nodes[id]) || {})[type] || []).forEach((fn) => fn({ target: nodes[id] }));
+const padAt = (x, type) => ((listeners.get(nodes['sf-pad']) || {})[type] || []).forEach((fn) =>
+  fn({ clientX: x, clientY: 85, pointerId: 1, pointerType: 'touch', buttons: 1, preventDefault(){} }));
+// Pace back and forth rather than holding one direction: walking straight for
+// two seconds takes him off the edge, and a fall reads as a lurch.
+const walk = (dir) => { padAt(dir > 0 ? 175 : 15, 'pointerup'); padAt(dir > 0 ? 175 : 15, 'pointerdown'); };
+
+walk(1);
+await run(14);
+nodes['sf-lagcomp'].checked = false; fire('sf-lagcomp', 'change');
+walk(-1);
+await run(24);
+nodes['sf-lagcomp'].checked = true;  fire('sf-lagcomp', 'change');
+const live = () => { const w = worlds[worlds.length - 1]; return w && w.players['local']; };
+await run(2);
+let worstToggle = 0, bigToggle = 0, died = false;
+// The drawn position, not the simulated one: corrections are eased out in the
+// draw offset, so the simulation can step while the body on screen glides.
+const drawn = () => { const q = live().pts[StickSim.HIPS];
+  return { x: q.dx !== undefined ? q.dx : q.x, y: q.dy !== undefined ? q.dy : q.y }; };
+let tx = drawn().x, ty = drawn().y;
+const startX = tx; let travelled = 0;
+for (let i = 0; i < 90; i++) {
+  if (i % 18 === 0) walk(i % 36 === 0 ? 1 : -1);
+  tick(); await new Promise((r) => setImmediate(r));
+  const h = drawn();
+  const moved = Math.abs(h.x - tx) + Math.abs(h.y - ty);
+  tx = h.x; ty = h.y;
+  if (live().dead) died = true;
+  travelled = Math.max(travelled, Math.abs(h.x - startX));
+  if (i > 3 && !died) { worstToggle = Math.max(worstToggle, moved); if (moved > 20) bigToggle++;
+    if (process.env.SF_DEBUG && moved > 20) console.log('    lurch f' + i + ' moved=' + moved.toFixed(0) +
+      ' x=' + h.x.toFixed(0) + ' y=' + h.y.toFixed(0)); }
+}
+ok('he stayed on the map and kept walking across the switch', travelled > 30 && !died,
+   'travelled ' + travelled.toFixed(0) + 'px, died=' + died);
+ok('switching lag compensation back on does not lurch the body', bigToggle === 0,
+   bigToggle + ' frame(s) over 20px, worst ' + worstToggle.toFixed(1) + 'px');
 process.exit(0);

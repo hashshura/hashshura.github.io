@@ -121,22 +121,48 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
   correction and is eased in with a per-frame cap; a respawn is teleported
   instead, because gliding across the map through the scenery looks worse.
 
-  Two things this got wrong, both worth remembering:
+  It ships **off**, because a wrong prediction is worse than a late one: the
+  checkbox under the controls turns it on and the choice is remembered.
+  `PREDICT_DEFAULT` in the post flips the default for everyone.
+
+  Four things this got wrong, all worth remembering:
 
   - **One clock.** The send times were stamped with `Date.now()` and the round trip
     measured against `performance.now()`. Epoch minus time-since-page-load put
     `rttEst` at about -1.7e12, the replay length rounded to zero ticks, and
     prediction was silently off — which feels exactly like having no prediction at
     all. Measured 190ms local response instead of 67ms.
+  - **The acked packet is not a round-trip probe.** Inputs are sent only when they
+    change, so `now - sentAt[ack]` measures how old the input the server is still
+    re-using is — up to 250ms more than the round trip. That read 273ms on a 120ms
+    link, sized the replay at 16 ticks instead of 4, and the body sprinted ahead
+    and got yanked back every snapshot: 282px in a frame, which is what
+    "unplayable" looks like. The server now also reports how many ticks it has been
+    re-using that input, and the round trip is only sampled on a snapshot where
+    that count is 0 or 1 — a fresh ack needs no correction, and one arrives with
+    every input. Subtracting the held time instead does not work: it is counted in
+    server ticks and the rest in client milliseconds, and the drift made the
+    estimate sag from 84ms to 28ms between sends.
+  - **Replay one way, not both.** The snapshot already contains every tick the
+    server ran before sending it, so the only gap left to cover is the trip down.
+    Replaying a full round trip's worth double-counts.
   - **Do not predict a corpse.** While dead, the local simulation ran its own
     respawn, and the sim picks the spawn point from its own random state — a
     different one than the server picked. The body flicked between the two every
     snapshot: 56 jumps of up to 630px. While dead the client now mirrors the
     server and steps nothing.
 
-  With both fixed, the local body responds in a constant 67ms at 120ms, 300ms and
-  600ms round trips, steady-state disagreement is 7/18/37px, and there is no
-  vertical desync and no respawn flicker.
+  With all four fixed, the local body responds in a constant 67ms at 120ms, 300ms
+  and 600ms round trips, the largest single-frame movement of the drawn body is
+  3.4-5.4px against a 4.4px walking step, and there is no vertical desync and no
+  respawn flicker.
+
+  One testing note worth keeping: measure the **drawn** position, not the
+  simulated one. Corrections are eased out in the draw offset, so the simulation
+  legitimately steps while the body on screen glides — assertions against the raw
+  simulation report teleports that nobody can see. And the harness has to drive
+  `Date.now()` from its fake clock, or the client's input throttling never fires
+  and the whole send/ack cadence under test is fiction.
 
   What it does not fix: someone *else's* sword still lands a round trip late.
   That needs rollback, which is a much bigger change.
