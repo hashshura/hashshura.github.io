@@ -37,6 +37,7 @@ export class Room {
     this.countdownTimer = null;
     this.countdownEndsAt = 0;
     this.houseTimer = null;
+    this.effectTimer = null;
     this.lastBeat = 0;
     this.meta = null;
     this.nextId = 1;
@@ -226,6 +227,9 @@ export class Room {
       type: 'state', you: viewerId, players,
       words: me && !me.dead ? me.words : null,
       specialReadyAt: me ? me.specialCooldownUntil : null,
+      // Only ever your own: the client counts this down on its own clock to
+      // show how much of your vanish is left.
+      vanishUntil: me ? me.vanishUntil : 0,
       trap: me && this.world.traps[viewerId] ? this.world.traps[viewerId] : null
     };
   }
@@ -237,6 +241,29 @@ export class Room {
       if (event) payload.event = event;
       this.send(ws, JSON.stringify(payload));
     }
+    this.scheduleEffectExpiry();
+  }
+
+  // Vanish and stun end on a clock, but every other broadcast here is caused
+  // by somebody acting — so a rogue who vanished and then stood still stayed
+  // invisible on everyone else's screen indefinitely, because no message ever
+  // went out to say the three seconds were up. Wake up exactly when the next
+  // timed effect lapses and re-send then.
+  scheduleEffectExpiry() {
+    if (this.effectTimer) { clearTimeout(this.effectTimer); this.effectTimer = null; }
+    if (!this.world || this.phase !== 'playing') return;
+    const now = Date.now();
+    let next = Infinity;
+    for (const id in this.world.players) {
+      const p = this.world.players[id];
+      if (p.vanishUntil > now) next = Math.min(next, p.vanishUntil);
+      if (p.stunnedUntil > now) next = Math.min(next, p.stunnedUntil);
+    }
+    if (next === Infinity) return;
+    this.effectTimer = setTimeout(() => {
+      this.effectTimer = null;
+      if (this.phase === 'playing') this.broadcastState();
+    }, Math.max(20, next - now + 25));
   }
 
   checkWinner() {
@@ -250,6 +277,7 @@ export class Room {
 
   resetToLobby() {
     this.phase = 'lobby';
+    if (this.effectTimer) { clearTimeout(this.effectTimer); this.effectTimer = null; }
     this.world = null;
     for (const c of this.conns.values()) c.ready = false;
     this.broadcastLobby();
