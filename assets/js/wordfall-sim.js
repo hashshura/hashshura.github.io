@@ -309,31 +309,39 @@
     return !world.occupancy[key(x, y)];
   }
 
+  // Returns both who got hit and every cell the shape actually swept (whether
+  // occupied or not) — the client needs the full sweep to draw the attack
+  // itself, not just its consequences.
   function targetsInShape(world, actor, dir, shape) {
     if (shape === 'self3x3') {
-      var hits3 = [];
+      var hits3 = [], tiles3 = [];
       for (var dy = -1; dy <= 1; dy++) {
         for (var dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
           var sx = actor.x + dx, sy = actor.y + dy;
           if (!inBounds(sx, sy) || world.grid[sy][sx] === WALL) continue;
+          tiles3.push([sx, sy]);
           var sid = world.occupancy[key(sx, sy)];
           if (sid) hits3.push(sid);
         }
       }
-      return hits3;
+      return { hits: hits3, tiles: tiles3 };
     }
-    var d = DIRS[dir], hits = [];
+    var d = DIRS[dir], hits = [], tiles = [];
     if (shape === 'point') {
       var x = actor.x + d[0], y = actor.y + d[1];
-      var id = inBounds(x, y) && world.grid[y][x] !== WALL ? world.occupancy[key(x, y)] : null;
-      if (id) hits.push(id);
+      if (inBounds(x, y) && world.grid[y][x] !== WALL) {
+        tiles.push([x, y]);
+        var id = world.occupancy[key(x, y)];
+        if (id) hits.push(id);
+      }
     } else if (shape === 'wide3') {
       // a row of three at depth 1, perpendicular to the attack direction
       var perp = d[0] !== 0 ? [0, 1] : [1, 0];
       for (var i = -1; i <= 1; i++) {
         var wx = actor.x + d[0] + perp[0] * i, wy = actor.y + d[1] + perp[1] * i;
         if (!inBounds(wx, wy) || world.grid[wy][wx] === WALL) continue;
+        tiles.push([wx, wy]);
         var wid = world.occupancy[key(wx, wy)];
         if (wid) hits.push(wid);
       }
@@ -343,11 +351,12 @@
         var lx = actor.x + d[0] * step, ly = actor.y + d[1] * step;
         if (!inBounds(lx, ly)) break;
         if (world.grid[ly][lx] === WALL) break;   // walls stop a line; rivers don't
+        tiles.push([lx, ly]);
         var lid = world.occupancy[key(lx, ly)];
         if (lid) hits.push(lid);
       }
     }
-    return hits;
+    return { hits: hits, tiles: tiles };
   }
 
   // Resolves one completed word against one action slot. Returns a result
@@ -385,10 +394,9 @@
       // detection below is always against real position — an attack that
       // happens to land on a vanished tile still connects, and connecting is
       // exactly what breaks the vanish (see applyDamage).
-      var hits = targetsInShape(world, p, adir, def.attackShape).filter(function (hid) {
-        return hid !== id;
-      });
-      result.ok = true; result.dir = adir; result.hits = [];
+      var swept = targetsInShape(world, p, adir, def.attackShape);
+      var hits = swept.hits.filter(function (hid) { return hid !== id; });
+      result.ok = true; result.dir = adir; result.tiles = swept.tiles; result.hits = [];
       hits.forEach(function (hid) { applyDamage(world, hid, def.attackDmg, now, result); });
     } else if (slot === 'special') {
       if (p.specialCooldownUntil > now) { return result; }
@@ -398,8 +406,9 @@
       if (def.special.kind === 'vanish') {
         p.vanishUntil = now + def.special.durationMs;
       } else if (def.special.kind === 'shieldStun') {
-        var shits = targetsInShape(world, p, null, 'self3x3').filter(function (hid) { return hid !== id; });
-        result.hits = [];
+        var sswept = targetsInShape(world, p, null, 'self3x3');
+        var shits = sswept.hits.filter(function (hid) { return hid !== id; });
+        result.tiles = sswept.tiles; result.hits = [];
         shits.forEach(function (hid) {
           applyDamage(world, hid, def.special.dmg, now, result);
           world.players[hid].stunnedUntil = now + def.special.stunMs;

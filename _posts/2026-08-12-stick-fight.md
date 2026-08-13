@@ -70,13 +70,13 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 #sf-controls{display:none;justify-content:space-between;align-items:center;gap:10px;
   padding:0 8px 0 4px;margin:8px 0 16px;touch-action:none;user-select:none;-webkit-user-select:none;}
 #sf-controls.on{display:flex;}
-#sf-pad{display:grid;grid-template-columns:repeat(3,66px);grid-template-rows:repeat(3,56px);gap:5px;touch-action:none;}
+#sf-pad{display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,38px);gap:4px;touch-action:none;}
 #sf-pad .sf-btn{pointer-events:none;}   /* the pad surface owns the gesture */
 #sf-pad .up{grid-area:1/2/2/3;}
 #sf-pad .lf{grid-area:2/1/3/2;}
 #sf-pad .rt{grid-area:2/3/3/4;}
 #sf-pad .dn{grid-area:3/2/4/3;}
-.sf-btn{font:inherit;font-weight:bold;font-size:21px;line-height:1;border:2px solid #222;border-radius:13px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;display:flex;align-items:center;justify-content:center;padding:0;}
+.sf-btn{font:inherit;font-weight:bold;font-size:16px;line-height:1;border:2px solid #222;border-radius:13px;background:#fbfbf7;color:#222;cursor:pointer;touch-action:none;display:flex;align-items:center;justify-content:center;padding:0;}
 .sf-btn.down{background:#222;color:#fbfbf7;}
 #sf-aimwrap{display:flex;flex-direction:column;align-items:center;gap:6px;padding-right:6px;}
 #sf-special{font:inherit;font-size:13px;font-weight:bold;letter-spacing:.03em;width:132px;height:42px;
@@ -100,14 +100,14 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 
 /* Narrow phones: shrink a little rather than overflowing */
 @media (max-width:400px){
-  #sf-pad{grid-template-columns:repeat(3,58px);grid-template-rows:repeat(3,50px);}
+  #sf-pad{grid-template-columns:repeat(3,38px);grid-template-rows:repeat(3,34px);}
   #sf-aimpad{width:116px;height:116px;}
   #sf-special{width:116px;height:38px;font-size:12px;}
   .sf-btn{font-size:19px;border-radius:11px;}
 }
 /* Desktop: keyboard is the real control, so the pads step back */
 @media (min-width:760px){
-  #sf-pad{grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,48px);}
+  #sf-pad{grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,32px);}
   #sf-aimpad{width:112px;height:112px;}
   #sf-special{width:112px;}
   #sf-controls{opacity:.85;}
@@ -233,6 +233,28 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   });
   cv.addEventListener('mousedown', function (e) { e.preventDefault(); keys[' '] = 1; });
   window.addEventListener('mouseup', function () { keys[' '] = 0; });
+
+  // Touching the arena aims there and swings, which is what clicking does with a
+  // mouse. It did nothing on a phone before: the mouse handlers above are the only
+  // path to the aim, and a tap does not produce a mousemove to set it.
+  function aimAtPoint(clientX, clientY) {
+    var r = cv.getBoundingClientRect();
+    mouse.cx = (clientX - r.left) / r.width * cv.width;
+    mouse.cy = (clientY - r.top) / r.height * cv.height;
+    mouse.has = true;
+    pad.aim = null;      // the tap takes aiming over, exactly as a mouse would
+  }
+  cv.addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'mouse') return;          // handled above
+    if (e.cancelable) e.preventDefault();           // and no synthetic click after
+    aimAtPoint(e.clientX, e.clientY);
+    pad.fire = 4;                                   // the same one-shot the ring uses
+  });
+  cv.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'mouse' || !e.buttons) return;
+    if (e.cancelable) e.preventDefault();
+    aimAtPoint(e.clientX, e.clientY);               // drag to re-aim, without swinging
+  });
 
   // Controls are real buttons under the arena rather than zones drawn inside it.
   // Drawn-on-canvas pads were tiny on a phone and sat on top of the fight.
