@@ -485,6 +485,10 @@
     MAX_PLAYERS: MAX_PLAYERS, MAX_HP: MAX_HP, CLASSES: CLASSES, SLOTS: SLOTS,
     createWorld: createWorld, addPlayer: addPlayer, removePlayer: removePlayer,
     resolveAction: resolveAction, checkWinner: checkWinner,
-    isStunned: isStunned, isVanished: isVanished
+    isStunned: isStunned, isVanished: isVanished,
+    // Exported for the offline bots: asking the real shape logic "would this
+    // attack hit?" is the only way for a bot's idea of its own reach to stay
+    // identical to the rules the server enforces.
+    targetsInShape: targetsInShape, walkable: walkable
   };
 });
