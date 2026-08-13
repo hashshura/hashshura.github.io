@@ -86,6 +86,10 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 #sf-aimpad{width:132px;height:132px;border:2px solid #222;border-radius:50%;background:#fbfbf7;touch-action:none;cursor:grab;}
 #sf-aimpad.down{background:#f1f1e9;cursor:grabbing;}
 
+#sf-opts{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:13px;color:#555;margin:0 0 12px;}
+#sf-opts label{display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:bold;color:#222;}
+#sf-opts input{width:17px;height:17px;accent-color:#222;cursor:pointer;}
+#sf-lagcomp-note{font-size:11px;color:#999;}
 #sf-help{font-size:12px;color:#777;margin:0 0 18px;line-height:1.6;}
 #sf-cta{font-size:14px;line-height:1.6;color:#555;margin:0 0 26px;padding:14px 16px;
   border:1.5px dashed #ccc;border-radius:10px;background:#fbfbf7;}
@@ -148,6 +152,11 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   </div>
 </div>
 </div>
+
+<p id="sf-opts">
+  <label><input type="checkbox" id="sf-lagcomp" checked> client-side lag compensation</label>
+  <span id="sf-lagcomp-note">your own stickman answers instantly and the server corrects it — turn off to see raw server latency</span>
+</p>
 
 <p id="sf-help">
   <b>Keyboard</b> — A/D move · W jump · S crouch, or drop through a platform when one is below you · arrows or mouse aim · space attacks · E special · Q drops your weapon.<br>
@@ -915,6 +924,16 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // prediction off, so it can be ruled in or out from the console in seconds.
   var PREDICT = true;
   try { PREDICT = localStorage.getItem('sf_predict') !== '0'; } catch (e) {}
+  var lagBox = document.getElementById('sf-lagcomp');
+  if (lagBox) {
+    lagBox.checked = PREDICT;
+    lagBox.addEventListener('change', function () {
+      PREDICT = lagBox.checked;
+      try { localStorage.setItem('sf_predict', PREDICT ? '1' : '0'); } catch (e) {}
+      if (!PREDICT) { predWorld = null; predMe = null; }     // fall back to snapshots
+      else if (mode === 'online' && me) predStart();
+    });
+  }
 
   function predStart() {
     if (!PREDICT || !world || !myId || !world.players[myId]) return;

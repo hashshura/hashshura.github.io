@@ -1,0 +1,41 @@
+// The switch has to work mid-match, both ways, without reloading.
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { makeCtx, el, listeners } = require('./shim.cjs');
+const StickSim = require('../../assets/js/stickfight-sim.js');
+const StickWire = require('../../assets/js/stickfight-wire.js');
+const main = makeCtx(), padc = makeCtx();
+const canvas = el('canvas'); canvas.width=960; canvas.height=540; canvas.clientWidth=960;
+canvas.getContext=()=>main;
+const aimpad = el('canvas'); aimpad.width=256; aimpad.height=256; aimpad.getContext=()=>padc;
+const padEl = el('div'); padEl.querySelectorAll=()=>[];
+padEl.getBoundingClientRect=()=>({left:0,top:0,width:190,height:170});
+const box = el('input'); box.checked = true;
+const nodes = { 'sf-canvas':canvas, 'sf-aimpad':aimpad, 'sf-pad':padEl, 'sf-lagcomp':box };
+const stub = (id) => nodes[id] || (nodes[id] = el('div'));
+let clock = 1000;
+globalThis.setInterval = () => 1;
+let raf = []; globalThis.requestAnimationFrame = (fn)=>raf.push(fn);
+globalThis.window = { StickSim, StickWire, innerHeight:900, addEventListener(){},
+  performance:{ now:()=>clock } };
+globalThis.document = { getElementById: stub, createElement: el, addEventListener(){}, querySelector:()=>el('i') };
+const store = {};
+globalThis.localStorage = { getItem:(k)=>k in store?store[k]:null, setItem:(k,v)=>{store[k]=v;} };
+const worlds = [];
+const realCreate = StickSim.createWorld;
+StickSim.createWorld = function (seed) { const w = realCreate(seed); worlds.push(w); return w; };
+const post = fs.readFileSync('../../_posts/2026-08-12-stick-fight.md','utf8');
+eval(post.split('<script>').pop().split('</script>')[0]);
+const ok = (l,c,x='') => console.log((c?'  ok   ':'  FAIL ')+l+(x?'  '+x:''));
+
+const L = listeners.get(box) || {};
+ok('switch found and wired', !!(L.change||[]).length, Object.keys(L).join(','));
+ok('defaults to on', box.checked === true);
+box.checked = false;
+(L.change||[]).forEach(fn=>fn({}));
+ok('turning it off is remembered', store.sf_predict === '0', JSON.stringify(store));
+box.checked = true;
+(L.change||[]).forEach(fn=>fn({}));
+ok('turning it back on is remembered', store.sf_predict === '1');
+process.exit(0);
