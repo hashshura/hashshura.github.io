@@ -207,35 +207,35 @@
         attack: ['fang','claw','jab','snip','nick','dart','flick','prick','slice','jolt','poke','stab','swipe','nip','cut','gore','gash','tear','rip','chop','slit','hack'],
         special: ['shadow','cloak','vanish','phantom','mirage','elusive','wraith','spectre','illusion','stealth','unseen','ghostly','veil','evasive','nightfall','obscure','fleeting','invisible','vapor','fade','blur']
       },
-      attackShape: 'point', attackDmg: 14,
+      attackShape: 'point', attackDmg: 17,
       special: { kind: 'vanish', durationMs: 3000, cooldownMs: 5000 }
     },
     fighter: {
       words: {
-        move: ['stomp','march','charge','trudge','plod','lumber','wade','tromp','stamp','clomp','stride','plough','wallow','hobble','shuffle','stagger','waddle','clump','thump','pound','trample'],
-        attack: ['cleave','slash','hew','smash','cleaver','sunder','rend','crush','batter','pummel','hammer','shatter','maul','gouge','bludgeon','thrash','wallop','clobber','ram','smite','demolish'],
-        special: ['guardwall','bulwark','ironclad','phalanx','barricade','juggernaut','stonewall','fortress','vanguard','stalwart','rampart','blockade','garrison','formation','resilient','unbreakable','defiant','immovable','entrenched','bastion','impenetrable','indomitable']
+        move: ['plod','wade','tramp','stomp','march','stamp','clomp','thump','pound','barge','shove','heave','lunge','clump','tromp','vault','press','drive','storm','trudge','stride','wallow'],
+        attack: ['hew','ram','maul','rend','bash','chop','hack','crush','smash','slash','smite','gouge','clout','whack','crack','batter','pummel','hammer','sunder','cleave','thrash','wallop'],
+        special: ['bulwark','rampart','aegis','shield','bastion','phalanx','warding','ironclad','stalwart','defiant','anvil','tower','wall','guard','block','brace','parry','shove','stance','fortify','buttress','barrier']
       },
-      attackShape: 'wide3', attackDmg: 12,
-      special: { kind: 'shieldStun', dmg: 20, stunMs: 2000, cooldownMs: 7000 }
+      attackShape: 'wide3', attackDmg: 20,
+      special: { kind: 'shieldStun', shape: 'self5x5', dmg: 20, stunMs: 2500, cooldownMs: 7000 }
     },
     ranger: {
       words: {
         move: ['dash','sprint','stride','trek','scamper','weave','prowl','dodge','glide','scout','roam','hike','creep','skirt','flank','circle','drift','veer','tiptoe','sidestep','traverse'],
-        attack: ['arrow','volley','snipe','pierce','skewer','longshot','shoot','quiver','bullseye','deadeye','marksman','impale','puncture','headshot','flight','aim','target','crossfire','trajectory','fletching'],
+        attack: ['volley','pierce','skewer','longshot','quiver','bullseye','deadeye','marksman','impale','puncture','headshot','crossfire','trajectory','fletching','crosshair','ricochet','broadhead','arbalest','bowstring','quarrel','nocking','feathered'],
         special: ['snare','ambush','tripwire','decoy','stakeout','camouflage','pitfall','deadfall','lure','bait','concealed','hidden','sabotage','entangle','ensnare','trapdoor','covert','clandestine','lurking','waylay','entrap']
       },
-      attackShape: 'line3', attackDmg: 15,
-      special: { kind: 'trap', dmg: 18, stunMs: 2000, cooldownMs: 3000 }
+      attackShape: 'line3', attackDmg: 12,
+      special: { kind: 'trap', dmg: 18, stunMs: 2000, cooldownMs: 6000 }
     },
     mage: {
       words: {
         move: ['quicksand','labyrinth','zephyr','ponderous','cumbersome','encumber','staggering','lethargic','sluggishly','unwieldy','laborious','torpid','listless','arduous','faltering','stumbling','hindered','weighted','encumbered','burdened','exhausted'],
-        attack: ['beam','lance','bolt','streak','torrent','cascade','surge','blast','ray','flare','current','channel','conduit','discharge','radiance','streaming','arcane','conjure','emission','projection'],
+        attack: ['projection','discharge','radiance','emanation','coruscate','irradiate','luminance','refraction','brilliance','scintilla','plasmatic','radiation','filament','starfire','resonance','torrent','cascade','conduit','current','voltage','photon','plasma'],
         special: ['sanctuary','restoration','rejuvenate','benediction','absolution','resurgence','convalesce','renewal','regenerate','revitalize','redemption','salvation','restorative','invigorate','replenish','recuperate','consecration','purification','sanctify','wellspring']
       },
-      attackShape: 'beamInf', attackDmg: 16,
-      special: { kind: 'heal', amount: 30, cooldownMs: 8000 }
+      attackShape: 'beamInf', attackDmg: 13,
+      special: { kind: 'heal', amount: 16, cooldownMs: 10000 }
     }
   };
 
@@ -324,19 +324,20 @@
   // itself, not just its consequences.
   function targetsInShape(world, actor, dir, shape) {
     var gw = world.w, gh = world.h;
-    if (shape === 'self3x3') {
-      var hits3 = [], tiles3 = [];
-      for (var dy = -1; dy <= 1; dy++) {
-        for (var dx = -1; dx <= 1; dx++) {
+    var burst = shape === 'self3x3' ? 1 : shape === 'self5x5' ? 2 : 0;
+    if (burst) {
+      var hitsB = [], tilesB = [];
+      for (var dy = -burst; dy <= burst; dy++) {
+        for (var dx = -burst; dx <= burst; dx++) {
           if (dx === 0 && dy === 0) continue;
           var sx = actor.x + dx, sy = actor.y + dy;
           if (!inBounds(sx, sy, gw, gh) || world.grid[sy][sx] === WALL) continue;
-          tiles3.push([sx, sy]);
+          tilesB.push([sx, sy]);
           var sid = world.occupancy[key(sx, sy)];
-          if (sid) hits3.push(sid);
+          if (sid) hitsB.push(sid);
         }
       }
-      return { hits: hits3, tiles: tiles3 };
+      return { hits: hitsB, tiles: tilesB };
     }
     var d = DIRS[dir], hits = [], tiles = [];
     if (shape === 'point') {
@@ -417,7 +418,7 @@
       if (def.special.kind === 'vanish') {
         p.vanishUntil = now + def.special.durationMs;
       } else if (def.special.kind === 'shieldStun') {
-        var sswept = targetsInShape(world, p, null, 'self3x3');
+        var sswept = targetsInShape(world, p, null, def.special.shape || 'self3x3');
         var shits = sswept.hits.filter(function (hid) { return hid !== id; });
         result.tiles = sswept.tiles; result.hits = [];
         shits.forEach(function (hid) {
