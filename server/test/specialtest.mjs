@@ -50,7 +50,7 @@ for (let i=0;i<20;i++) frame();
 await new Promise(r => setTimeout(r, 140));
 frame();
 ok('button enabled once armed', btn.disabled === false, 'disabled=' + btn.disabled);
-ok('button says PUTAR', /PUTAR/.test(btn.textContent), btn.textContent);
+ok('button says SPIN', /SPIN/.test(btn.textContent), btn.textContent);
 
 const handlers = listeners.get(btn) || {};
 ok('button has a pointerdown handler', !!(handlers.pointerdown || []).length,

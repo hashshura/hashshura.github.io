@@ -173,7 +173,7 @@
       id: id, name: (name || 'anon').slice(0, 12), color: colorIdx || i,
       hp: MAX_HP, kills: 0, deaths: 0, dead: false, respawn: 0,
       weapon: 'fist', ammo: 0, cd: 0, flail: 0, facing: 1, grounded: false,
-      aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, jumpCool: 0, coyote: 0,
+      aim: 0, walk: 0, stride: 0, duckAmt: 1, swing: 0, swingKind: '', swingAim: 0, jumpCool: 0, coyote: 0, dropT: 0, dropY: -1,
       spin: 0, spinAim: 0, spinHits: null, spray: 0, sprayT: 0, sprayDir: 1, lastHitBy: null, lastHitAt: -999,
       pts: [], input: { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, special: 0, aim: 0 }
     };
@@ -255,6 +255,7 @@
       if (solid) {
         for (var j = 0; j < world.platforms.length; j++) {
           var pl = world.platforms[j];
+          if (p.dropT > 0 && pl.y === p.dropY) continue;   // dropping through this one
           if (q.x < pl.x - 3 || q.x > pl.x + pl.w + 3) continue;
           // Land either by crossing the top surface this tick (however fast), or
           // by already standing on this platform and having sagged a few px into
@@ -281,6 +282,27 @@
       if (q.x < 6) { q.x = 6; q.ox = q.x + (q.ox - q.x) * 0.4; }
       if (q.x > W - 6) { q.x = W - 6; q.ox = q.x + (q.ox - q.x) * 0.4; }
     }
+  }
+
+  // The deck a foot is planted on, or -1.
+  function standingOn(p) {
+    var a = p.pts[FOOTL].g, b = p.pts[FOOTR].g;
+    if (a >= 0 && b >= 0) return Math.min(a, b);
+    return a >= 0 ? a : b;
+  }
+
+  // Down means two different things, the way it does in a fighting game: on a
+  // deck with something under it you drop through, and on the lowest one — with
+  // nothing below but the void — you crouch instead.
+  function deckBelow(world, p, y) {
+    var hips = p.pts[HIPS];
+    for (var i = 0; i < world.platforms.length; i++) {
+      var pl = world.platforms[i];
+      if (pl.y <= y + 8) continue;
+      if (hips.x < pl.x - 10 || hips.x > pl.x + pl.w + 10) continue;
+      return true;
+    }
+    return false;
   }
 
   // Posture is solved as constraints, in the same relaxation loop as the links.
@@ -648,7 +670,16 @@
       if (p.flail > 0) p.flail--;
       if (p.swing > 0) p.swing--;
       p.aim = p.input.aim;
-      p.duckAmt = (p.input.duck && p.grounded && p.flail <= 0) ? 0.58 : 1;
+      if (p.dropT > 0) p.dropT--;
+      var stand = standingOn(p);
+      var canDrop = p.grounded && stand >= 0 && deckBelow(world, p, stand);
+      if (p.input.duck && !p._ducked) {
+        p._ducked = true;
+        if (canDrop && p.flail <= 0) { p.dropT = 20; p.dropY = stand; p.coyote = 0; }
+      }
+      if (!p.input.duck) p._ducked = false;
+      // crouching only where there is nothing to drop to
+      p.duckAmt = (p.input.duck && p.grounded && p.flail <= 0 && !canDrop && p.dropT <= 0) ? 0.58 : 1;
 
       // jump: shove the whole body up, once per press
       if (p.input.jump && p.grounded && p.flail <= 0 && !p._jumped) {

@@ -3,7 +3,7 @@ layout: post
 title: Stick Fight
 comments: true
 thumbnail: /assets/img/2026-08-12-stick-fight.png
-teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertangan kosong; pedang dan pistol baru turun belakangan, dan dorongan pedang lebih berbahaya daripada damage-nya."
+teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Everyone starts bare-handed; swords and guns drop in later, and a sword's shove is deadlier than its damage."
 ---
 
 <style>
@@ -111,21 +111,21 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   <span id="sf-gear-what">✊ TANGAN</span>
   <span id="sf-gear-dmg"></span>
   <span id="sf-gear-ammo"></span>
-  <button type="button" id="sf-drop" disabled>buang</button>
+  <button type="button" id="sf-drop" disabled>drop</button>
 </div>
 <div id="sf-wrap" class="with-menu">
   <canvas id="sf-canvas" width="960" height="540"></canvas>
-  <button id="sf-exit" hidden title="kembali ke menu (Esc)">✕ menu</button>
+  <button id="sf-exit" hidden title="back to the menu (Esc)">✕ menu</button>
   <div id="sf-menu">
     <h2>🥢 STICK FIGHT</h2>
-    <p id="sf-tagline">Ragdoll bertongkat. Pedang mendorong keras, pistol menjangkau jauh, dan jurangnya tidak memaafkan.</p>
+    <p id="sf-tagline">Ragdoll stickmen. The sword shoves hard, the gun reaches far, and the pit forgives nothing.</p>
     <div class="row">
-      <input id="sf-name" maxlength="12" placeholder="namamu" />
-      <button id="sf-solo">Main lawan bot</button>
+      <input id="sf-name" maxlength="12" placeholder="your name" />
+      <button id="sf-solo">Play vs bots</button>
     </div>
     <div class="row">
-      <button id="sf-create" class="ghost">Buat room</button>
-      <button id="sf-join" class="ghost">Gabung room</button>
+      <button id="sf-create" class="ghost">Create room</button>
+      <button id="sf-join" class="ghost">Join room</button>
     </div>
     <p id="sf-note"></p>
     <div id="sf-rooms" hidden></div>
@@ -140,18 +140,18 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     <button class="sf-btn dn" data-k="duck">▼</button>
   </div>
   <div id="sf-aimwrap">
-    <canvas id="sf-aimpad" width="256" height="256" title="arahkan lalu lepas untuk menyerang"></canvas>
-    <button type="button" id="sf-special" disabled>✷ <span>SPESIAL</span></button>
+    <canvas id="sf-aimpad" width="256" height="256" title="drag to aim, let go to attack"></canvas>
+    <button type="button" id="sf-special" disabled>✷ <span>SPECIAL</span></button>
   </div>
 </div>
 </div>
 
 <p id="sf-help">
-  <b>Keyboard:</b> A/D jalan, W lompat, S merunduk. Panah (atau gerakkan mouse) untuk mengarahkan senjata, <b>spasi</b> atau klik untuk menyerang.<br>
-  <b>HP:</b> di layar sentuh, tombol arah di kiri; lingkaran di kanan untuk mengarahkan senjata — <b>lepas jarimu untuk menyerang</b>.<br>
-  <b>Spesial (tombol ✷ atau E):</b> pedang berputar 360° dan melempar semua yang kena; pistol memberondong kiri-kanan sampai habis. Dua-duanya menghabiskan senjatanya.<br>
-  <b>Senjata:</b> tombol <b>buang</b> (atau Q) melepas senjatamu. Semua mulai bertangan kosong (7 damage). Pedang (22 + dorongan keras) dan pistol (14, 8 butir) muncul sendiri di peta tiap beberapa detik — ambil dengan menabraknya.<br>
-  <b>Jatuh ke jurang tetap mati</b> — dorongan pedang lebih berbahaya daripada damage-nya. Petanya diacak tiap ronde.
+  <b>Keyboard:</b> A/D to walk, W to jump, S to crouch — or to drop through a platform when there is one below you. Arrows (or the mouse) aim the weapon, <b>space</b> or click attacks.<br>
+  <b>Touch:</b> the d-pad on the left, the ring on the right to aim — <b>lift your finger to attack</b>.<br>
+  <b>Special (✷ or E):</b> the sword spins a full circle and throws everyone it touches; the gun sprays left and right until the magazine is empty. Both use the weapon up.<br>
+  <b>Weapons:</b> <b>drop</b> (or Q) throws yours away. Everyone starts bare-handed (7 damage). Swords (22 plus a heavy shove) and guns (14, 8 rounds) drop onto the map every few seconds — walk into one to pick it up.<br>
+  <b>Falling into the pit still kills you</b> — a sword's shove is deadlier than its damage. The map is generated fresh every round.
 </p>
 
 <script src="/assets/js/stickfight-sim.js"></script>
@@ -167,9 +167,9 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   var wrap = document.getElementById('sf-wrap');
   var controls = document.getElementById('sf-controls');
   var ap = document.getElementById('sf-aimpad');
-  if (!S || !cv || !cv.getContext) { if (menu) menu.innerHTML = '<p>Perangkat ini tidak bisa menjalankan gamenya.</p>'; return; }
+  if (!S || !cv || !cv.getContext) { if (menu) menu.innerHTML = '<p>This device cannot run the game.</p>'; return; }
   var ctx = cv.getContext('2d');
-  if (!ctx) { menu.innerHTML = '<p>Canvas tidak tersedia.</p>'; return; }
+  if (!ctx) { menu.innerHTML = '<p>Canvas is not available.</p>'; return; }
 
   // The room server: a Worker with one Durable Object per room code.
   // See server/ in the repo. Set sf_server in localStorage to point at a local
@@ -618,15 +618,15 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     var cw = cv.width, ch = cv.height;
     var u = Math.max(13, Math.min(20, cw / 28));
     if (me && me.dead) {
-      txt('mati — hidup lagi dalam ' + Math.ceil(me.respawn / 60) + 's',
+      txt('down — respawning in ' + Math.ceil(me.respawn / 60) + 's',
           cw / 2, ch * 0.13, u * 1.4, '#c0392b', true);
     }
     if (winner) {
       ctx.save();
       ctx.fillStyle = 'rgba(251,251,247,.88)';
       ctx.fillRect(0, ch / 2 - u * 3.4, cw, u * 6.8);
-      txt(winner + ' menang', cw / 2, ch / 2 + u * 0.2, u * 2.4, INK, true);
-      txt('klik untuk main lagi', cw / 2, ch / 2 + u * 2.4, u, '#666');
+      txt(winner + ' wins', cw / 2, ch / 2 + u * 0.2, u * 2.4, INK, true);
+      txt('click to play again', cw / 2, ch / 2 + u * 2.4, u, '#666');
       ctx.restore();
     }
   }
@@ -639,8 +639,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   var gearAmmo = document.getElementById('sf-gear-ammo');
   var dropBtn = document.getElementById('sf-drop');
   var gearLast = '';
-  var GEAR_NAME = { fist: '✊ TANGAN', sword: '⚔ PEDANG', gun: '🔫 PISTOL' };
-  var GEAR_PUSH = { fist: 'dorongan kecil', sword: 'dorongan kuat', gun: 'dorongan kecil' };
+  var GEAR_NAME = { fist: '✊ FISTS', sword: '⚔ SWORD', gun: '🔫 GUN' };
+  var GEAR_PUSH = { fist: 'light shove', sword: 'heavy shove', gun: 'light shove' };
   function drawGear() {
     if (!gearEl || !me) return;
     var wp = S.WEAPONS[me.weapon];
@@ -649,13 +649,13 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     gearLast = sig;
     gearWhat.textContent = GEAR_NAME[me.weapon] || me.weapon;
     gearDmg.textContent = wp.dmg + ' dmg · ' + GEAR_PUSH[me.weapon] +
-      ' · jeda ' + (wp.cd / 60).toFixed(2) + 's';
-    gearAmmo.textContent = wp.ammo ? '· ' + me.ammo + ' butir' : '';
+      ' · ' + (wp.cd / 60).toFixed(2) + 's cooldown';
+    gearAmmo.textContent = wp.ammo ? '· ' + me.ammo + ' rounds' : '';
     dropBtn.disabled = me.weapon === 'fist';
     if (specialBtn) {
       // the special spends the weapon, so it is only offered while you hold one
       specialBtn.disabled = me.weapon === 'fist';
-      var label = SPECIAL_NAME[me.weapon] || '✷ SPESIAL';
+      var label = SPECIAL_NAME[me.weapon] || '✷ SPECIAL';
       if (me.weapon === 'gun') label += ' ×' + me.ammo;   // it sprays what is left
       if (specialBtn.textContent !== label) specialBtn.textContent = label;
     }
@@ -666,7 +666,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     });
   }
   var specialBtn = document.getElementById('sf-special');
-  var SPECIAL_NAME = { sword: '✷ PUTAR', gun: '✷ BERONDONG', fist: '✷ SPESIAL' };
+  var SPECIAL_NAME = { sword: '✷ SPIN', gun: '✷ SPRAY', fist: '✷ SPECIAL' };
   if (specialBtn) {
     specialBtn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
@@ -714,7 +714,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       }
       var goal = document.createElement('span');
       goal.className = 'goal';
-      goal.textContent = 'sampai ' + KILLS_TO_WIN + ' kill' +
+      goal.textContent = 'first to ' + KILLS_TO_WIN + ' kills' +
         (mode === 'online' ? (myPing ? ' · ' + myPing + 'ms' : ' · online') : '');
       scoreEl.appendChild(goal);
     }
@@ -819,12 +819,12 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   }
 
   function startSolo() {
-    var name = (nameEl.value || 'kamu').slice(0, 12);
+    var name = (nameEl.value || 'you').slice(0, 12);
     try { localStorage.setItem('sf_name', name); } catch (e) {}
     world = S.createWorld(Date.now() % 100000);   // new arena every match
     me = S.addPlayer(world, 'me', name, 0);
     bots = [];
-    var botNames = ['botak', 'bonar', 'bombom'];
+    var botNames = ['rex', 'nyx', 'vex'];
     for (var i = 0; i < 3; i++) bots.push(S.addPlayer(world, 'b' + i, botNames[i], i + 1));
     winner = null;
     mode = 'solo';
@@ -899,9 +899,9 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
   }
 
   function connect(code, password, ping) {
-    var name = (nameEl.value || 'kamu').slice(0, 12);
+    var name = (nameEl.value || 'you').slice(0, 12);
     try { localStorage.setItem('sf_name', name); } catch (e) {}
-    note.textContent = 'Menyambung ke ' + code + '…';
+    note.textContent = 'Connecting to ' + code + '…';
     var url = NET_URL.replace(/^http/, 'ws') + '/room/' + code + '/ws?name=' +
               encodeURIComponent(name) + '&pw=' + encodeURIComponent(password || '');
     ws = new WebSocket(url);
@@ -943,17 +943,17 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
     ws.onclose = function () {
       if (mode !== 'online') return;
       mode = 'menu'; showMenu(); ws = null;
-      note.textContent = 'Sambungan terputus.';
+      note.textContent = 'Disconnected.';
     };
-    ws.onerror = function () { note.textContent = 'Gagal menyambung.'; };
+    ws.onerror = function () { note.textContent = 'Could not connect.'; };
   }
 
   function refreshRooms() {
     roomsEl.hidden = false;
-    roomsEl.innerHTML = '<div>mencari room…</div>';
+    roomsEl.innerHTML = '<div>looking for rooms…</div>';
     api('/lobby/list').then(function (data) {
       var rooms = (data.rooms || []).slice(0, 12);
-      if (!rooms.length) { roomsEl.innerHTML = '<div>belum ada room. buat satu?</div>'; return; }
+      if (!rooms.length) { roomsEl.innerHTML = '<div>no rooms yet — create one?</div>'; return; }
       return Promise.all(rooms.map(function (r) {
         return pingRoom(r.code).then(function (ms) { r.ping = ms; return r; });
       })).then(function (list) {
@@ -966,8 +966,8 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
             '<span>' + r.players + '/' + r.max + ' · ' +
             (r.ping > 3000 ? '—' : r.ping + 'ms') + '</span>';
           row.addEventListener('click', function () {
-            if (r.players >= r.max) { note.textContent = 'Room itu sudah penuh.'; return; }
-            var pw = r.private ? (window.prompt('Password room ' + r.code) || '') : '';
+            if (r.players >= r.max) { note.textContent = 'That room is full.'; return; }
+            var pw = r.private ? (window.prompt('Password for room ' + r.code) || '') : '';
             if (r.private && !pw) return;
             connect(r.code, pw, r.ping);
           });
@@ -975,7 +975,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
         });
       });
     }).catch(function () {
-      roomsEl.innerHTML = '<div>server tidak menjawab.</div>';
+      roomsEl.innerHTML = '<div>the server is not answering.</div>';
     });
   }
 
@@ -987,13 +987,13 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
 
   if (!NET_URL) {
     createBtn.disabled = joinBtn.disabled = true;
-    note.textContent = 'Room online belum aktif — servernya belum dipasang.';
+    note.textContent = 'Online rooms are off — no server is configured.';
   } else {
     createBtn.addEventListener('click', function () {
-      var rn = window.prompt('Nama room:', 'ruang ' + (nameEl.value || 'kita'));
+      var rn = window.prompt('Room name:', (nameEl.value || 'our') + "'s room");
       if (rn === null) return;
-      var pw = window.prompt('Password (kosongkan kalau mau room terbuka):', '') || '';
-      note.textContent = 'Membuat room…';
+      var pw = window.prompt('Password (leave blank for a public room):', '') || '';
+      note.textContent = 'Creating room…';
       api('/lobby/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1001,7 +1001,7 @@ teaser: "Ragdoll bertongkat di peta yang diacak tiap ronde. Semua mulai bertanga
       }).then(function (res) {
         if (res.error) { note.textContent = res.error; return; }
         connect(res.code, pw, 0);
-      }).catch(function () { note.textContent = 'Gagal membuat room.'; });
+      }).catch(function () { note.textContent = 'Could not create the room.'; });
     });
     joinBtn.addEventListener('click', refreshRooms);
   }
