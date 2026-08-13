@@ -52,7 +52,7 @@ export class Lobby {
         .sort((a, b) => b.ts - a.ts)
         .map((r) => ({
           code: r.code, name: r.name, private: !!r.private,
-          players: r.players, max: r.max, colo: r.colo
+          players: r.players, max: r.max, colo: r.colo, country: r.country || ''
         }));
       return json({ rooms: list });
     }
@@ -65,10 +65,17 @@ export class Lobby {
       }
       let code;
       do { code = randomCode(4); } while (this.rooms[code]);
-      const colo = (request.cf && request.cf.colo) || '??';
+      const cf = request.cf || {};
+      const colo = cf.colo || '??';
+      const country = (cf.country || '').toUpperCase();
 
-      // hand the password to the room; the lobby keeps only the flag
-      const stub = this.env.ROOM.get(this.env.ROOM.idFromName(code));
+      // Pin the room to the creator's region explicitly rather than letting it
+      // land in whichever colo happened to serve this request. The hint only
+      // applies at creation, which is now.
+      const HINT = { AS: 'apac', OC: 'oc', EU: 'weur', NA: 'enam', SA: 'sam', AF: 'afr' };
+      const hint = HINT[cf.continent] || undefined;
+      const stub = this.env.ROOM.get(this.env.ROOM.idFromName(code),
+                                    hint ? { locationHint: hint } : undefined);
       await stub.fetch('https://do/room/' + code + '/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,7 +90,7 @@ export class Lobby {
         code,
         name: (body.name || 'room ' + code).slice(0, 24),
         private: !!(body.password && body.password.length),
-        players: 0, max: 6, colo, ts: Date.now(),
+        players: 0, max: 6, colo, country, ts: Date.now(),
         // the host is about to connect; give them a moment before ageing out
         emptySince: Date.now()
       };

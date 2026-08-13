@@ -6,9 +6,14 @@ as a Cloudflare Worker with two Durable Object classes.
 - **Room** — one object per room code. Runs the simulation at 60Hz, broadcasts a
   binary snapshot every third tick (20Hz), and holds the salted password hash for
   a private room. Clients only ever send 4-byte inputs, so nobody can win by
-  editing their own physics.
+  editing their own physics. Inputs are queued and applied one per tick, so a
+  burst of network jitter is spread over consecutive ticks instead of the earlier
+  input being overwritten unapplied.
 - **Lobby** — one global object. Lists which rooms exist, how full they are, and
-  which colo they woke up in. Never sees a password.
+  which colo they woke up in, and the country it is in — the client shows that as a
+  flag next to the measured ping. A new room is created with a `locationHint` from
+  the creator's continent, so the fight runs near the people in it. Never sees a
+  password.
 
 Both import `../assets/js/stickfight-sim.js` and `../assets/js/stickfight-wire.js`
 directly, so the server and the browser run byte-identical physics and speak the
@@ -107,14 +112,31 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
   input, and said so.
 
   The reconciliation is the subtle part. A snapshot shows where the server thought
-  you were when it handled input that left a round trip ago, so a walking body is
-  *supposed* to sit ahead of it by roughly speed x latency. Blending toward the
-  snapshot regardless drags the body backwards every frame — mud, and then
-  oscillation. So gaps that latency explains are ignored, middling ones eased out
-  at 12%, and only an unpredictable event (a hit, a death, a respawn) or a gap
-  four times larger than latency allows is taken outright. Steady-state
-  disagreement measured 16px at 120ms, 34px at 300ms, 71px at 600ms, with no
-  runaway and no vertical desync.
+  you were when it handled input that left a round trip ago, so blending toward it
+  drags a walking body backwards every frame — mud, and then oscillation. So the
+  snapshot is taken *exactly*, and then the inputs the server has not caught up
+  with are replayed from a per-tick history on top of it. Each input carries a
+  sequence number, the server echoes the one it applied, and the round trip is
+  measured from that echo. Whatever difference survives the replay is genuine
+  correction and is eased in with a per-frame cap; a respawn is teleported
+  instead, because gliding across the map through the scenery looks worse.
+
+  Two things this got wrong, both worth remembering:
+
+  - **One clock.** The send times were stamped with `Date.now()` and the round trip
+    measured against `performance.now()`. Epoch minus time-since-page-load put
+    `rttEst` at about -1.7e12, the replay length rounded to zero ticks, and
+    prediction was silently off — which feels exactly like having no prediction at
+    all. Measured 190ms local response instead of 67ms.
+  - **Do not predict a corpse.** While dead, the local simulation ran its own
+    respawn, and the sim picks the spawn point from its own random state — a
+    different one than the server picked. The body flicked between the two every
+    snapshot: 56 jumps of up to 630px. While dead the client now mirrors the
+    server and steps nothing.
+
+  With both fixed, the local body responds in a constant 67ms at 120ms, 300ms and
+  600ms round trips, steady-state disagreement is 7/18/37px, and there is no
+  vertical desync and no respawn flicker.
 
   What it does not fix: someone *else's* sword still lands a round trip late.
   That needs rollback, which is a much bigger change.

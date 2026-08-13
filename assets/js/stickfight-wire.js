@@ -55,7 +55,7 @@
         }
       }
       keys[s] = need;
-      sizes += 7 + (need ? PTS * 4 : PTS * 2);
+      sizes += 9 + (need ? PTS * 4 : PTS * 2);   // +2 for the acked input seq
     }
 
     var bullets = world.bullets.length > 40 ? world.bullets.slice(0, 40) : world.bullets;
@@ -85,6 +85,7 @@
       dv.setUint8(o, (WEAPON_ID[p.weapon] << 6) | (Math.min(31, p.ammo) << 1) | (p.dead ? 1 : 0)); o += 1;
       dv.setUint8(o, Math.min(255, p.cd)); o += 1;
       dv.setInt16(o, Math.round(p.aim * 10000)); o += 2;
+      dv.setUint16(o, (p.ack || 0) & 0xffff); o += 2;
 
       if (!base.pos[s]) base.pos[s] = new Int16Array(PTS * 2);
       var bp = base.pos[s];
@@ -154,6 +155,7 @@
       var wa = dv.getUint8(o); o += 1;
       var cd = dv.getUint8(o); o += 1;
       var aim = dv.getInt16(o) / 10000; o += 2;
+      var ack = dv.getUint16(o); o += 2;
       var key = !!(keyMask & (1 << s));
 
       var id = info ? info.id : 'slot' + s;
@@ -164,7 +166,7 @@
       seen[id] = 1;
       p.hp = hp; p.kills = kills; p.deaths = deaths;
       p.weapon = WEAPON_NAME[wa >> 6]; p.ammo = (wa >> 1) & 31; p.dead = !!(wa & 1);
-      p.cd = cd; p.aim = aim;
+      p.cd = cd; p.aim = aim; p.ack = ack;
 
       for (var k = 0; k < PTS; k++) {
         var q = p.pts[k];
@@ -213,13 +215,18 @@
     return tick;
   }
 
-  // ---- input (client -> server): 4 bytes ------------------------------------
-  function encodeInput(i) {
-    var buf = new ArrayBuffer(4), dv = new DataView(buf);
+  // ---- input (client -> server): 6 bytes ------------------------------------
+  // The sequence number is the client's own tick counter. The server echoes back
+  // the last one it applied, which is what lets the client rewind to the server's
+  // state and replay exactly the inputs the server has not seen yet — instead of
+  // guessing how far ahead of the server it ought to be.
+  function encodeInput(i, seq) {
+    var buf = new ArrayBuffer(6), dv = new DataView(buf);
     dv.setUint8(0, T_INPUT);
     dv.setUint8(1, (i.l ? 1 : 0) | (i.r ? 2 : 0) | (i.jump ? 4 : 0) |
                    (i.duck ? 8 : 0) | (i.fire ? 16 : 0) | (i.discard ? 32 : 0) | (i.special ? 64 : 0));
     dv.setInt16(2, Math.round(i.aim * 10000));
+    dv.setUint16(4, (seq || 0) & 0xffff);
     return buf;
   }
   function decodeInput(buf, into) {
@@ -234,6 +241,7 @@
     into.discard = b & 32 ? 1 : 0;
     into.special = b & 64 ? 1 : 0;
     into.aim = dv.getInt16(2) / 10000;
+    into.seq = dv.byteLength >= 6 ? dv.getUint16(4) : 0;
     return into;
   }
 

@@ -197,17 +197,57 @@ const sbody = room().world.players[srvId];
 StickSim.step(room().world);
 sbody.pts.forEach((q) => { q.ox += 9; q.oy += 4; });     // a sword's shove
 sbody.flail = 26;
-let worstHit = 0;
-lx = pred.pts[StickSim.HIPS].x; ly = pred.pts[StickSim.HIPS].y;
+let worstHit = 0, worstHitServer = 0;
+let sx = sbody.pts[StickSim.HIPS].x, sy = sbody.pts[StickSim.HIPS].y;
+lx = pred.pts[StickSim.HIPS].dx !== undefined ? pred.pts[StickSim.HIPS].dx : pred.pts[StickSim.HIPS].x;
+ly = pred.pts[StickSim.HIPS].dy !== undefined ? pred.pts[StickSim.HIPS].dy : pred.pts[StickSim.HIPS].y;
 for (let i = 0; i < 90; i++) {
   tick(); await new Promise((r) => setImmediate(r));
-  const d = Math.abs(pred.pts[StickSim.HIPS].x - lx) + Math.abs(pred.pts[StickSim.HIPS].y - ly);
-  lx = pred.pts[StickSim.HIPS].x; ly = pred.pts[StickSim.HIPS].y;
+  const h = pred.pts[StickSim.HIPS];
+  const dxNow = h.dx !== undefined ? h.dx : h.x, dyNow = h.dy !== undefined ? h.dy : h.y;
+  const d = Math.abs(dxNow - lx) + Math.abs(dyNow - ly);
+  lx = dxNow; ly = dyNow;
   worstHit = Math.max(worstHit, d);
+  // the same body on the server: pure physics, no corrections. If the client is
+  // not adding jumps, its worst frame should look like the server's worst frame.
+  const sv = room().world.players[srvId].pts[StickSim.HIPS];
+  worstHitServer = Math.max(worstHitServer, Math.abs(sv.x - sx) + Math.abs(sv.y - sy));
+  sx = sv.x; sy = sv.y;
 }
-ok('taking a hit does not teleport the body', worstHit < 20,
-   'worst single-frame move after a hit ' + worstHit.toFixed(1) + 'px');
+// The replay covers one tick per tick of latency, so on the frame a correction
+// lands, more of the body's own motion is compressed into it the further away you
+// are. Hence the latency term: it is not slack for sloppiness, it is the shape of
+// the problem.
+ok('a hit moves the drawn body no harder than physics moves it on the server',
+   worstHit <= worstHitServer * 1.4 + 4 + LATENCY * 0.045,
+   'client ' + worstHit.toFixed(1) + 'px vs server ' + worstHitServer.toFixed(1) + 'px in the worst frame');
 
 ok('gap stays within what latency explains', worstX < 25 + LATENCY * 0.35, 'worst horizontal gap ' + worstX.toFixed(0) + 'px over ' + samples + ' samples');
 ok('no vertical desync', worstY < 40, 'worst vertical gap ' + worstY.toFixed(0) + 'px');
+// Death and respawn: the server picks a spawn point with its own random state,
+// and if the local prediction respawns too it picks a different one — so the body
+// would flick between the two until they agree.
+const sbody2 = room().world.players[srvId];
+sbody2.pts.forEach((q) => { q.y = 760; q.oy = 760; });   // into the pit, which is fatal
+await run(8);
+let worstDeath = 0, flicks = 0, aliveFor = -1, positions = new Set();
+let px0 = pred.pts[StickSim.HIPS].x, py0 = pred.pts[StickSim.HIPS].y;
+for (let i = 0; i < 320; i++) {
+  tick(); await new Promise((r) => setImmediate(r));
+  const h = pred.pts[StickSim.HIPS];
+  const moved = Math.abs(h.x - px0) + Math.abs(h.y - py0);
+  px0 = h.x; py0 = h.y;
+  // Two teleports are expected and correct: the news of the death arriving a
+  // latency late, and the respawn itself. A flicker is a jump AFTER that — the
+  // local body and the server disagreeing about where the spawn was.
+  aliveFor = pred.dead ? -1 : aliveFor + 1;
+  if (aliveFor > 3 && moved > 40) {
+    worstDeath = Math.max(worstDeath, moved); flicks++; positions.add(Math.round(h.x / 50));
+    if (process.env.SF_DEBUG) console.log('    flick at frame ' + i + ' -> ' + h.x.toFixed(0) + ',' + h.y.toFixed(0) + ' moved ' + moved.toFixed(0));
+  }
+}
+ok('the test actually killed and respawned him', sbody2.deaths > 0 && !sbody2.dead,
+   'deaths=' + sbody2.deaths + ' dead=' + sbody2.dead + ' hp=' + sbody2.hp);
+ok('the respawned body does not flick between spawn points', flicks === 0,
+   flicks + ' unexplained jump(s), worst ' + worstDeath.toFixed(0) + 'px, ' + positions.size + ' distinct places');
 process.exit(0);

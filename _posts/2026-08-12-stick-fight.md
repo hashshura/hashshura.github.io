@@ -90,6 +90,8 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 #sf-opts label{display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:bold;color:#222;}
 #sf-opts input{width:17px;height:17px;accent-color:#222;cursor:pointer;}
 #sf-lagcomp-note{font-size:11px;color:#999;}
+#sf-lagsim{font-size:11px;font-weight:bold;color:#c0392b;}
+#sf-lagsim[hidden]{display:none;}
 #sf-help{font-size:12px;color:#777;margin:0 0 18px;line-height:1.6;}
 #sf-cta{font-size:14px;line-height:1.6;color:#555;margin:0 0 26px;padding:14px 16px;
   border:1.5px dashed #ccc;border-radius:10px;background:#fbfbf7;}
@@ -155,6 +157,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 
 <p id="sf-opts">
   <label><input type="checkbox" id="sf-lagcomp" checked> client-side lag compensation</label>
+  <span id="sf-lagsim" hidden></span>
   <span id="sf-lagcomp-note">your own stickman answers instantly and the server corrects it — turn off to see raw server latency</span>
 </p>
 
@@ -435,13 +438,16 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // ---- drawing -------------------------------------------------------------
   // in online mode a point is drawn between the last two snapshots
   var lerpA = 1;
+  var drawOffset = null, drawIdx = 0;
   function px(q) {
     var v = lerpA >= 1 ? q.x : q.ox + (q.x - q.ox) * lerpA;
+    if (drawOffset && drawOffset[q._pi] !== undefined) v += drawOffset[q._pi].x;
     q.dx = v;                     // remember where it was actually drawn
     return v;
   }
   function py(q) {
     var v = lerpA >= 1 ? q.y : q.oy + (q.y - q.oy) * lerpA;
+    if (drawOffset && drawOffset[q._pi] !== undefined) v += drawOffset[q._pi].y;
     q.dy = v;
     return v;
   }
@@ -799,7 +805,9 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       // already up to date, so interpolating it would only add lag back
       if (mode === 'online' && predMe && id === myId) {
         var keep = lerpA; lerpA = 1;
+        drawOffset = predOff;
         drawPlayer(predMe);
+        drawOffset = null;
         lerpA = keep;
       } else {
         drawPlayer(world.players[id]);
@@ -833,12 +841,29 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         checkWin();
       } else if (mode === 'online' && me && predMe) {
         gatherInput(me);
-        predMe.input = me.input;         // the same input the server is being sent
+        // A corpse is not predicted. The simulation respawns from its own random
+        // state, so a local copy picks a different spawn point than the server and
+        // the body flicks between them — measured at 901px across five places.
+        // While dead, mirror the server and nothing else.
+        predTick = (predTick + 1) & 0xffff;
+        var dead = predMe.dead;
+        inputHist[predTick & 255] = dead
+          // a blank entry, so a replay reaching back across the death does not
+          // re-apply whatever was held down when it happened
+          ? { l: 0, r: 0, jump: 0, duck: 0, fire: 0, discard: 0, special: 0, aim: me.input.aim }
+          : {
+            l: me.input.l, r: me.input.r, jump: me.input.jump, duck: me.input.duck,
+            fire: me.input.fire, discard: me.input.discard, special: me.input.special,
+            aim: me.input.aim
+          };
+        if (dead) continue;
+        predMe.input = inputHist[predTick & 255];
         S.step(predWorld);
       }
     }
     if (mode === 'online' && me && !predMe) gatherInput(me);
     updateCamera();
+    predOffsetDecay();
     // Snapshots land at 20Hz, so draw part-way between the last two rather than
     // stepping 50ms at a time. decodeSnapshot leaves the previous position in
     // ox/oy, which is exactly the "from" this needs.
@@ -920,11 +945,15 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // trip late; that is the honest limit of this without rollback.
   var predWorld = null, predMe = null, predBad = 0;
   var HIPS_I = S.HIPS;
+  // Per-tick input history, so a correction can be replayed rather than guessed.
+  var predTick = 0, inputHist = new Array(256), sentAt = new Array(256);
+  var rttEst = 80, predOff = null;
   // Escape hatch: localStorage.setItem('sf_predict','0') and reload turns
   // prediction off, so it can be ruled in or out from the console in seconds.
   var PREDICT = true;
   try { PREDICT = localStorage.getItem('sf_predict') !== '0'; } catch (e) {}
   var lagBox = document.getElementById('sf-lagcomp');
+  var lagSim = document.getElementById('sf-lagsim');
   if (lagBox) {
     lagBox.checked = PREDICT;
     lagBox.addEventListener('change', function () {
@@ -939,6 +968,8 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     if (!PREDICT || !world || !myId || !world.players[myId]) return;
     predWorld = S.createWorld(mapSeed || 1);
     predMe = S.addPlayer(predWorld, 'local', 'me', 0);
+    for (var pi = 0; pi < predMe.pts.length; pi++) predMe.pts[pi]._pi = pi;
+    predOff = null;
     predSync(world.players[myId], true);
   }
 
@@ -948,51 +979,94 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     predMe.name = src.name; predMe.color = src.color;
     predMe.weapon = src.weapon; predMe.ammo = src.ammo; predMe.cd = src.cd;
     predMe.spin = src.spin; predMe.spray = src.spray;
-    // Reconciliation, and the rule is: a correction must never be visible as a
-    // jump. Only a death or a respawn teleports the body, because a teleport is
-    // what those are. Everything else is pulled at a capped speed, so the worst
-    // case is a body that glides into place over a few frames.
+    // Reconciliation by replay.
     //
-    // A snapshot also shows where the server thought we were when it handled
-    // input that left a round trip ago, so a moving body belongs *ahead* of it by
-    // roughly speed x latency. Gaps that size are left completely alone.
-    var err = 0;
-    for (var i = 0; i < src.pts.length; i++) {
-      err += Math.abs(src.pts[i].x - predMe.pts[i].x) + Math.abs(src.pts[i].y - predMe.pts[i].y);
+    // The snapshot is the truth, but it is the truth about a moment that has
+    // passed: it reflects our input from a round trip ago. So take it exactly —
+    // no guessing about how far ahead we ought to be — and then re-apply the
+    // inputs the server has not caught up with yet, from a per-tick history. The
+    // result lands where the player's own hands say the body should be.
+    //
+    // The round trip is measured from the acks themselves: the server echoes the
+    // sequence number of the input it applied, and we know when we sent it.
+    // Date.now(), because that is the clock sentAt is stamped with. Mixing in
+    // performance.now() here — ms since page load, against an epoch timestamp —
+    // drove rttEst to about -1.7e12, which rounded the replay down to zero ticks
+    // and quietly turned prediction off altogether.
+    var now = Date.now();
+    var t0 = sentAt[(src.ack || 0) & 255];
+    if (t0) {
+      var sample = Math.max(0, Math.min(600, now - t0));
+      rttEst = Math.max(0, Math.min(600, rttEst * 0.7 + sample * 0.3));
     }
-    err /= src.pts.length;
-    var hips = predMe.pts[HIPS_I];
-    var speed = Math.abs(hips.x - hips.ox) + Math.abs(hips.y - hips.oy);
-    var slack = 18 + speed * 9;
 
-    var teleport = hard || src.dead || predMe.dead;
+    // Remember where the body is being *drawn* — which includes any correction
+    // still being eased out. Measuring from the simulation position instead would
+    // reset the smoothing on every snapshot, so the per-frame cap below would
+    // never get to do its job and a knockback correction arrived in two frames.
+    var wasX = [], wasY = [];
+    for (var w0 = 0; w0 < predMe.pts.length; w0++) {
+      var off0 = predOff && predOff[w0] ? predOff[w0] : null;
+      wasX.push(predMe.pts[w0].x + (off0 ? off0.x : 0));
+      wasY.push(predMe.pts[w0].y + (off0 ? off0.y : 0));
+    }
+
+    var wasDead = predMe.dead;
+    for (var c0 = 0; c0 < src.pts.length; c0++) {
+      var a0 = predMe.pts[c0], b0 = src.pts[c0];
+      a0.x = b0.x; a0.y = b0.y; a0.ox = b0.ox; a0.oy = b0.oy; a0.g = b0.g;
+    }
     predMe.dead = src.dead; predMe.respawn = src.respawn; predMe.flail = src.flail;
+    if (src.dead) { predOff = null; return; }      // a corpse is drawn as the server has it
 
-    if (teleport) {
-      for (var t = 0; t < src.pts.length; t++) {
-        var a0 = predMe.pts[t], b0 = src.pts[t];
-        a0.x = b0.x; a0.y = b0.y; a0.ox = b0.ox; a0.oy = b0.oy; a0.g = b0.g;
+    if (!src.dead) {
+      var ticks = Math.max(0, Math.min(40, Math.round(rttEst / (1000 / 60))));
+      for (var r0 = ticks; r0 >= 1; r0--) {
+        var hist = inputHist[(predTick - r0 + 1) & 255];
+        if (hist) predMe.input = hist;
+        S.step(predWorld);
       }
-      predBad = 0;
-      return;
     }
-    if (err <= slack) { predBad = 0; return; }
 
-    // A gap this large for this long is not latency — the two simulations have
-    // genuinely parted company (a different map seed would do it). Rebuild.
-    predBad = err > 150 ? predBad + 1 : 0;
-    if (predBad > 25) { predBad = 0; predStart(); return; }
-
-    var cap = src.flail > 0 ? 6 : 2.2;          // px per snapshot, ~30 a second
-    for (var k = 0; k < src.pts.length; k++) {
-      var a = predMe.pts[k], b = src.pts[k];
-      var dx = b.x - a.x, dy = b.y - a.y;
-      var d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 0.01) continue;
-      var stepPx = Math.min(cap, d * 0.3);
-      a.x += dx / d * stepPx; a.y += dy / d * stepPx;
-      a.ox += dx / d * stepPx; a.oy += dy / d * stepPx;   // shift history too, or this becomes velocity
+    // whatever is left after replaying is genuine correction: slide it in
+    predOff = [];
+    var far = 0;
+    for (var o0 = 0; o0 < predMe.pts.length; o0++) {
+      var ox0 = wasX[o0] - predMe.pts[o0].x, oy0 = wasY[o0] - predMe.pts[o0].y;
+      far = Math.max(far, Math.abs(ox0) + Math.abs(oy0));
+      predOff.push({ x: ox0, y: oy0 });
     }
+    // A respawn moves you across the map, and smoothing it would draw the body
+    // gliding through the scenery. Detect it properly — coming back from dead —
+    // rather than by distance, because a hard knockback at high latency covers
+    // just as much ground and does want smoothing.
+    if ((wasDead && !src.dead) || far > 900) predOff = null;
+  }
+
+  // The visual offset decays every frame, so a correction is a short glide rather
+  // than a step. It only moves the drawing; the simulation stays authoritative.
+  function predOffset(i) {
+    if (!predOff || !predOff[i]) return null;
+    return predOff[i];
+  }
+  function predOffsetDecay() {
+    if (!predOff) return;
+    var alive = false;
+    for (var i = 0; i < predOff.length; i++) {
+      var o = predOff[i];
+      // Percentage decay alone reveals a big correction too fast: 18% of the
+      // hundred-odd pixels a sword adds is still a visible lurch. Cap the reveal
+      // per frame so even a violent correction arrives as motion, not a step.
+      for (var ax = 0; ax < 2; ax++) {
+        var key = ax ? 'y' : 'x';
+        var v = o[key];
+        if (!v) continue;
+        var step = Math.min(Math.max(Math.abs(v) * 0.13, 0.5), 4.5);
+        o[key] = Math.abs(v) <= step ? 0 : v - (v > 0 ? step : -step);
+      }
+      if (Math.abs(o.x) > 0.3 || Math.abs(o.y) > 0.3) alive = true;
+    }
+    if (!alive) predOff = null;
   }
 
   // ---- multiplayer ---------------------------------------------------------
@@ -1024,15 +1098,36 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       .catch(function () { return 9999; });
   }
 
+  // Fake latency, for testing the netcode without a VPN or a friend abroad.
+  // ?lag=150 on the URL delays every packet in both directions by 150ms, so a
+  // second tab can be given a 300ms round trip and played side by side with a
+  // clean one — with the lag-compensation switch to flip between them.
+  var FAKE_LAG = 0;
+  try {
+    var m = /[?&]lag=(\d+)/.exec(window.location && window.location.search || '');
+    if (m) FAKE_LAG = Math.max(0, Math.min(1000, parseInt(m[1], 10)));
+  } catch (e) {}
+
+  function lagWrap(sock) {
+    if (!FAKE_LAG) return sock;
+    var real = sock.send.bind(sock);
+    sock.send = function (d) { setTimeout(function () { try { real(d); } catch (e) {} }, FAKE_LAG); };
+    return sock;
+  }
+  function lagDeliver(fn) {
+    if (!FAKE_LAG) return fn;
+    return function (ev) { setTimeout(function () { fn(ev); }, FAKE_LAG); };
+  }
+
   function connect(code, password, ping) {
     var name = (nameEl.value || 'you').slice(0, 12);
     try { localStorage.setItem('sf_name', name); } catch (e) {}
     note.textContent = 'Connecting to ' + code + '…';
     var url = NET_URL.replace(/^http/, 'ws') + '/room/' + code + '/ws?name=' +
               encodeURIComponent(name) + '&pw=' + encodeURIComponent(password || '');
-    ws = new WebSocket(url);
+    ws = lagWrap(new WebSocket(url));
     ws.binaryType = 'arraybuffer';
-    myPing = ping || 0;
+    myPing = (ping || 0) + FAKE_LAG * 2;
 
     ws.onopen = function () {
       world = S.createWorld(1);      // replaced as soon as the roster names the seed
@@ -1043,7 +1138,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       showGame();
       last = 0; acc = 0;
     };
-    ws.onmessage = function (ev) {
+    ws.onmessage = lagDeliver(function (ev) {
       if (typeof ev.data === 'string') {
         var msg = JSON.parse(ev.data);
         if (msg.type === 'roster') {
@@ -1083,7 +1178,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       if (me && !predMe) predStart();
       else if (me) predSync(me, false);
       checkWin();
-    };
+    });
     ws.onclose = function () {
       if (mode !== 'online') return;
       mode = 'menu'; showMenu(); ws = null;
@@ -1107,7 +1202,8 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
           var row = document.createElement('div');
           row.innerHTML = '<span>' + (r.private ? '🔒 ' : '') +
             r.code + ' · ' + escapeHtml(r.name) + '</span>' +
-            '<span>' + r.players + '/' + r.max + ' · ' +
+            '<span>' + flagOf(r.country) + ' ' + escapeHtml(r.colo || '??') +
+            ' · ' + r.players + '/' + r.max + ' · ' +
             (r.ping > 3000 ? '—' : r.ping + 'ms') + '</span>';
           row.addEventListener('click', function () {
             if (r.players >= r.max) { note.textContent = 'That room is full.'; return; }
@@ -1121,6 +1217,13 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     }).catch(function () {
       roomsEl.innerHTML = '<div>the server is not answering.</div>';
     });
+  }
+
+  // An ISO country code turns into its flag with two regional-indicator letters.
+  function flagOf(cc) {
+    if (!cc || cc.length !== 2) return '🏳';
+    return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65,
+                                0x1F1E6 + cc.charCodeAt(1) - 65);
   }
 
   function escapeHtml(s) {
@@ -1177,10 +1280,11 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     var aimDue = aimQ !== lastAim && since >= 100;
     if (!bitsChanged && !aimDue && since < 250) return;
     lastBits = bits; lastAim = aimQ; lastSentAt = now; pendingFire = false;
+    sentAt[predTick & 255] = now;
     ws.send(Wire.encodeInput({
       l: i.l, r: i.r, jump: i.jump, duck: i.duck, fire: fire, discard: i.discard,
       special: i.special, aim: aimQ
-    }));
+    }, predTick));
   }, 50);
 
   window.addEventListener('resize', sizeCanvas);

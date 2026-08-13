@@ -109,15 +109,22 @@ export class Room {
     const id = 'p' + (this.nextId++);
     this.slots[slot] = id;
     S.addPlayer(this.world, id, name, slot);
-    this.conns.set(ws, { slot, id, name, color: slot, seenAt: Date.now() });
+    this.conns.set(ws, { slot, id, name, color: slot, seenAt: Date.now(), q: [], ack: 0 });
 
     ws.addEventListener('message', (ev) => {
       const c = this.conns.get(ws);
       if (!c) return;
       c.seenAt = Date.now();
       if (typeof ev.data === 'string') return;            // no text protocol
-      const p = this.world && this.world.players[c.id];
-      if (p) W.decodeInput(toBuffer(ev.data), p.input);
+      // Queue rather than apply. Two inputs landing in the same 16ms window used
+      // to mean the first was overwritten unapplied, so a burst of network jitter
+      // turned into uneven acceleration. The queue is short on purpose: it exists
+      // to spread a jitter burst over consecutive ticks, not to buffer play.
+      const decoded = W.decodeInput(toBuffer(ev.data), {});
+      if (decoded) {
+        c.q.push(decoded);
+        if (c.q.length > 4) c.q.shift();
+      }
     });
     const bye = () => this.drop(ws);
     ws.addEventListener('close', bye);
@@ -179,6 +186,22 @@ export class Room {
 
   tick() {
     if (!this.world) return;
+
+    // one queued input per tick, in the order they were sent
+    for (const [, c] of this.conns) {
+      const p = this.world.players[c.id];
+      if (!p) continue;
+      if (c.q.length) {
+        const inp = c.q.shift();
+        p.input.l = inp.l; p.input.r = inp.r; p.input.jump = inp.jump;
+        p.input.duck = inp.duck; p.input.fire = inp.fire;
+        p.input.discard = inp.discard; p.input.special = inp.special;
+        p.input.aim = inp.aim;
+        c.ack = inp.seq;
+      }
+      p.ack = c.ack;             // travels in the snapshot, so the client can replay
+    }
+
     S.step(this.world);
 
     if (this.world.t % SNAP_EVERY === 0) {
