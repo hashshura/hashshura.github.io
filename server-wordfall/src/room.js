@@ -15,7 +15,7 @@
 import S from '../../assets/js/wordfall-sim.js';
 
 const MAX_PLAYERS = 6;
-const READY_COUNTDOWN_MS = 5000;
+const READY_COUNTDOWN_MS = 3000;
 const HOUSEKEEP_MS = 5000;
 // A real player can go well over 20s without sending anything — sitting in
 // the lobby, or just thinking through a mage's word — unlike stick fight
@@ -66,6 +66,7 @@ export class Room {
         code,
         name: (body.name || 'room').slice(0, 24),
         colo: body.colo || '??',
+        mapSize: S.MAP_SIZES[body.mapSize] ? body.mapSize : 'medium',
         salt,
         hash: body.password ? await sha256(salt + body.password) : null
       };
@@ -183,7 +184,7 @@ export class Room {
     this.sendAll({
       type: 'lobby', phase: this.phase, roster,
       countdownEndsAt: this.phase === 'countdown' ? this.countdownEndsAt : null,
-      room: this.meta ? { code: this.meta.code, name: this.meta.name } : null
+      room: this.meta ? { code: this.meta.code, name: this.meta.name, mapSize: this.meta.mapSize } : null
     });
   }
 
@@ -195,7 +196,8 @@ export class Room {
 
     this.phase = 'playing';
     const seed = Date.now() % 100000;
-    this.world = S.createWorld(seed, conns.length);
+    const mapSize = this.meta ? this.meta.mapSize : 'medium';
+    this.world = S.createWorld(seed, conns.length, mapSize);
     for (const c of conns) S.addPlayer(this.world, c.id, c.name, c.cls);
 
     this.sendAll({ type: 'start', seed, grid: this.world.grid });

@@ -77,6 +77,7 @@ export class Lobby {
         body: JSON.stringify({
           name: body.name || 'room ' + code,
           password: body.password || '',
+          mapSize: body.mapSize || 'medium',
           colo
         })
       });

@@ -22,7 +22,8 @@
   'use strict';
 
   // ---- grid -------------------------------------------------------------
-  var GRID_W = 16, GRID_H = 16;
+  var MAP_SIZES = { small: 8, medium: 12, big: 16 };
+  var DEFAULT_SIZE = 16;
   var FLOOR = 0, WALL = 1, RIVER = 2;
   var MAX_PLAYERS = 6;
   var MAX_HP = 100;
@@ -32,35 +33,37 @@
     return seedRef.s / 4294967296;
   }
 
-  function inBounds(x, y) { return x >= 0 && x < GRID_W && y >= 0 && y < GRID_H; }
+  function inBounds(x, y, w, h) { return x >= 0 && x < w && y >= 0 && y < h; }
 
   // Spines carve the map into rooms and corridors: a handful of long straight
   // walls, each with one or two doorway gaps, plus a couple of short stubs
   // branching off them so a room reads as a room instead of one bare
-  // rectangle with a slit in it.
+  // rectangle with a slit in it. Size comes from the grid itself, not a
+  // fixed constant, so the same carving logic works at 8x8, 12x12 or 16x16.
   function carveWalls(grid, rs) {
+    var h = grid.length, w = grid[0].length;
     var numSpines = 3 + Math.floor(rnd(rs) * 2); // 3-4
     var spines = [];
     for (var s = 0; s < numSpines; s++) {
       var horiz = rnd(rs) < 0.5;
-      var pos = 2 + Math.floor(rnd(rs) * ((horiz ? GRID_H : GRID_W) - 4));
+      var pos = 2 + Math.floor(rnd(rs) * ((horiz ? h : w) - 4));
       spines.push({ horiz: horiz, pos: pos });
     }
 
     spines.forEach(function (spine) {
-      var len = spine.horiz ? GRID_W : GRID_H;
+      var len = spine.horiz ? w : h;
       var doors = [];
       var numDoors = 1 + (rnd(rs) < 0.5 ? 1 : 0);
       for (var d = 0; d < numDoors; d++) {
         var doorAt = 1 + Math.floor(rnd(rs) * (len - 2));
         var doorW = 1 + Math.floor(rnd(rs) * 2);
-        for (var w = 0; w < doorW; w++) doors.push(doorAt + w);
+        for (var wd = 0; wd < doorW; wd++) doors.push(doorAt + wd);
       }
       for (var i = 0; i < len; i++) {
         if (doors.indexOf(i) !== -1) continue;
         var x = spine.horiz ? i : spine.pos;
         var y = spine.horiz ? spine.pos : i;
-        if (inBounds(x, y)) grid[y][x] = WALL;
+        if (inBounds(x, y, w, h)) grid[y][x] = WALL;
       }
 
       var numStubs = 1 + Math.floor(rnd(rs) * 2);
@@ -71,18 +74,19 @@
         for (var j = 1; j <= stubLen; j++) {
           var sx = spine.horiz ? at : spine.pos + side * j;
           var sy = spine.horiz ? spine.pos + side * j : at;
-          if (inBounds(sx, sy)) grid[sy][sx] = WALL;
+          if (inBounds(sx, sy, w, h)) grid[sy][sx] = WALL;
         }
       }
     });
   }
 
   function floodFill(grid, blocks) {
+    var h = grid.length, w = grid[0].length;
     var seen = [];
-    for (var y = 0; y < GRID_H; y++) seen.push(new Array(GRID_W).fill(false));
+    for (var y = 0; y < h; y++) seen.push(new Array(w).fill(false));
     var comps = [];
-    for (var y0 = 0; y0 < GRID_H; y0++) {
-      for (var x0 = 0; x0 < GRID_W; x0++) {
+    for (var y0 = 0; y0 < h; y0++) {
+      for (var x0 = 0; x0 < w; x0++) {
         if (seen[y0][x0] || blocks.indexOf(grid[y0][x0]) !== -1) continue;
         var stack = [[x0, y0]], cells = [];
         seen[y0][x0] = true;
@@ -91,7 +95,7 @@
           cells.push([x, y]);
           [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
             var nx = x + d[0], ny = y + d[1];
-            if (inBounds(nx, ny) && !seen[ny][nx] && blocks.indexOf(grid[ny][nx]) === -1) {
+            if (inBounds(nx, ny, w, h) && !seen[ny][nx] && blocks.indexOf(grid[ny][nx]) === -1) {
               seen[ny][nx] = true;
               stack.push([nx, ny]);
             }
@@ -137,17 +141,18 @@
   // width-1 random walk biased to cross from one edge toward the opposite one
   // rather than wander forever.
   function carveRiver(grid, rs, vertical) {
+    var h = grid.length, w = grid[0].length;
     var x, y, dx, dy;
-    if (vertical) { x = Math.floor(rnd(rs) * GRID_W); y = 0; dx = 0; dy = 1; }
-    else { x = 0; y = Math.floor(rnd(rs) * GRID_H); dx = 1; dy = 0; }
+    if (vertical) { x = Math.floor(rnd(rs) * w); y = 0; dx = 0; dy = 1; }
+    else { x = 0; y = Math.floor(rnd(rs) * h); dx = 1; dy = 0; }
     var guard = 0;
-    while (inBounds(x, y) && guard++ < GRID_W * GRID_H) {
+    while (inBounds(x, y, w, h) && guard++ < w * h) {
       grid[y][x] = RIVER;
       if (rnd(rs) < 0.3) {
         if (vertical) x += rnd(rs) < 0.5 ? -1 : 1;
         else y += rnd(rs) < 0.5 ? -1 : 1;
-        x = Math.max(0, Math.min(GRID_W - 1, x));
-        y = Math.max(0, Math.min(GRID_H - 1, y));
+        x = Math.max(0, Math.min(w - 1, x));
+        y = Math.max(0, Math.min(h - 1, y));
         grid[y][x] = RIVER;
       }
       x += dx; y += dy;
@@ -157,9 +162,10 @@
   // Farthest-point sampling over floor tiles, so six spawns land spread across
   // the arena instead of clustered near whichever tile the PRNG hit first.
   function pickSpawns(grid, rs, count) {
+    var h = grid.length, w = grid[0].length;
     var floorCells = [];
-    for (var y = 0; y < GRID_H; y++)
-      for (var x = 0; x < GRID_W; x++)
+    for (var y = 0; y < h; y++)
+      for (var x = 0; x < w; x++)
         if (grid[y][x] === FLOOR) floorCells.push([x, y]);
 
     var spawns = [floorCells[Math.floor(rnd(rs) * floorCells.length)]];
@@ -178,9 +184,9 @@
     return spawns;
   }
 
-  function buildMap(rs) {
+  function buildMap(rs, w, h) {
     var grid = [];
-    for (var y = 0; y < GRID_H; y++) grid.push(new Array(GRID_W).fill(FLOOR));
+    for (var y = 0; y < h; y++) grid.push(new Array(w).fill(FLOOR));
     carveWalls(grid, rs);
     ensureConnected(grid, [WALL]);
     var numRivers = 1 + (rnd(rs) < 0.5 ? 1 : 0);
@@ -259,12 +265,16 @@
   }
 
   // ---- world ---------------------------------------------------------------
-  function createWorld(seed, playerCount) {
+  // `size` is a MAP_SIZES key ('small'/'medium'/'big'), a raw tile count, or
+  // omitted for the default — resolved once here so nothing downstream needs
+  // to know grid dimensions are a per-match choice rather than a constant.
+  function createWorld(seed, playerCount, size) {
+    var n = MAP_SIZES[size] || (typeof size === 'number' && size > 0 ? size : DEFAULT_SIZE);
     var rs = { s: (seed || 12345) >>> 0 };
-    var grid = buildMap(rs);
+    var grid = buildMap(rs, n, n);
     var spawns = pickSpawns(grid, rs, playerCount || MAX_PLAYERS);
     return {
-      seed: seed, rs: rs, grid: grid, spawns: spawns,
+      seed: seed, rs: rs, grid: grid, spawns: spawns, w: n, h: n,
       players: {},        // id -> player state
       occupancy: {},       // "x,y" -> id
       traps: {},           // id -> {x,y} (owner's active trap, one at a time)
@@ -303,7 +313,7 @@
   function isVanished(p, now) { return p.vanishUntil > now; }
 
   function walkable(world, x, y) {
-    if (!inBounds(x, y)) return false;
+    if (!inBounds(x, y, world.w, world.h)) return false;
     var t = world.grid[y][x];
     if (t === WALL || t === RIVER) return false;
     return !world.occupancy[key(x, y)];
@@ -313,13 +323,14 @@
   // occupied or not) — the client needs the full sweep to draw the attack
   // itself, not just its consequences.
   function targetsInShape(world, actor, dir, shape) {
+    var gw = world.w, gh = world.h;
     if (shape === 'self3x3') {
       var hits3 = [], tiles3 = [];
       for (var dy = -1; dy <= 1; dy++) {
         for (var dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
           var sx = actor.x + dx, sy = actor.y + dy;
-          if (!inBounds(sx, sy) || world.grid[sy][sx] === WALL) continue;
+          if (!inBounds(sx, sy, gw, gh) || world.grid[sy][sx] === WALL) continue;
           tiles3.push([sx, sy]);
           var sid = world.occupancy[key(sx, sy)];
           if (sid) hits3.push(sid);
@@ -330,7 +341,7 @@
     var d = DIRS[dir], hits = [], tiles = [];
     if (shape === 'point') {
       var x = actor.x + d[0], y = actor.y + d[1];
-      if (inBounds(x, y) && world.grid[y][x] !== WALL) {
+      if (inBounds(x, y, gw, gh) && world.grid[y][x] !== WALL) {
         tiles.push([x, y]);
         var id = world.occupancy[key(x, y)];
         if (id) hits.push(id);
@@ -340,16 +351,16 @@
       var perp = d[0] !== 0 ? [0, 1] : [1, 0];
       for (var i = -1; i <= 1; i++) {
         var wx = actor.x + d[0] + perp[0] * i, wy = actor.y + d[1] + perp[1] * i;
-        if (!inBounds(wx, wy) || world.grid[wy][wx] === WALL) continue;
+        if (!inBounds(wx, wy, gw, gh) || world.grid[wy][wx] === WALL) continue;
         tiles.push([wx, wy]);
         var wid = world.occupancy[key(wx, wy)];
         if (wid) hits.push(wid);
       }
     } else if (shape === 'line3' || shape === 'beamInf') {
-      var max = shape === 'line3' ? 3 : Math.max(GRID_W, GRID_H);
+      var max = shape === 'line3' ? 3 : Math.max(gw, gh);
       for (var step = 1; step <= max; step++) {
         var lx = actor.x + d[0] * step, ly = actor.y + d[1] * step;
-        if (!inBounds(lx, ly)) break;
+        if (!inBounds(lx, ly, gw, gh)) break;
         if (world.grid[ly][lx] === WALL) break;   // walls stop a line; rivers don't
         tiles.push([lx, ly]);
         var lid = world.occupancy[key(lx, ly)];
@@ -470,7 +481,7 @@
   }
 
   return {
-    GRID_W: GRID_W, GRID_H: GRID_H, FLOOR: FLOOR, WALL: WALL, RIVER: RIVER,
+    MAP_SIZES: MAP_SIZES, DEFAULT_SIZE: DEFAULT_SIZE, FLOOR: FLOOR, WALL: WALL, RIVER: RIVER,
     MAX_PLAYERS: MAX_PLAYERS, MAX_HP: MAX_HP, CLASSES: CLASSES, SLOTS: SLOTS,
     createWorld: createWorld, addPlayer: addPlayer, removePlayer: removePlayer,
     resolveAction: resolveAction, checkWinner: checkWinner,
