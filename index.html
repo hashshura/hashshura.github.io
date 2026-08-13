@@ -19,7 +19,8 @@ title: Home
         <img class="post-thumb" src="{{ site.baseurl }}{{ post.thumbnail }}" alt="{{ post.title }}" style="display:block;width:100%;height:auto;border-radius:8px;margin:.4rem 0 .8rem;">
       </a>
       {% if post.teaser %}<p>{{ post.teaser }}</p>{% endif %}
-      <p><a href="{{ site.baseurl }}{{ post.url }}">Main &amp; baca &rarr;</a></p>
+      {% assign cta_options = "Let's go!,Read on,Dive in,Keep going,Take a look,Onward,Full send,Here we go" | split: "," %}
+      <p><a href="{{ site.baseurl }}{{ post.url }}">{{ cta_options | sample }} &rarr;</a></p>
     {% else %}
       {{ post.content | truncatewords: 50 }}
     {% endif %}
