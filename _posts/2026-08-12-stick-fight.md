@@ -150,11 +150,9 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 </div>
 
 <p id="sf-help">
-  <b>Keyboard:</b> A/D to walk, W to jump, S to crouch — or to drop through a platform when there is one below you. Arrows (or the mouse) aim the weapon, <b>space</b> or click attacks.<br>
-  <b>Touch:</b> the d-pad on the left, the ring on the right to aim — <b>lift your finger to attack</b>.<br>
-  <b>Special (✷ or E):</b> the sword spins a full circle and throws everyone it touches; the gun sprays left and right until the magazine is empty. Both use the weapon up.<br>
-  <b>Weapons:</b> <b>drop</b> (or Q) throws yours away. Everyone starts bare-handed (7 damage). Swords (22 plus a heavy shove) and guns (14, 8 rounds) drop onto the map every few seconds — walk into one to pick it up.<br>
-  <b>Falling into the pit still kills you</b> — a sword's shove is deadlier than its damage. The map is generated fresh every round.
+  <b>Keyboard</b> — A/D move · W jump · S crouch, or drop through a platform when one is below you · arrows or mouse aim · space attacks · E special · Q drops your weapon.<br>
+  <b>Touch</b> — d-pad on the left; the ring on the right aims, and lifting your finger attacks.<br>
+  Weapons fall onto the map over time; walk into one to take it. Each has its own reach, damage and shove, and a special that uses it up — the bar above the arena tells you what you are holding.
 </p>
 
 <p id="sf-cta">
