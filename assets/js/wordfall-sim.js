@@ -207,12 +207,12 @@
         attack: ['fang','claw','jab','snip','nick','dart','flick','prick','slice','jolt','poke','stab','swipe','nip','cut','gore','gash','tear','rip','chop','slit','hack'],
         special: ['shadow','cloak','vanish','phantom','mirage','elusive','wraith','spectre','illusion','stealth','unseen','ghostly','veil','evasive','nightfall','obscure','fleeting','invisible','vapor','fade','blur']
       },
-      attackShape: 'point', attackDmg: 17,
+      attackShape: 'point', attackDmg: 15,
       special: { kind: 'vanish', durationMs: 3000, cooldownMs: 5000 }
     },
     fighter: {
       words: {
-        move: ['plod','wade','tramp','stomp','march','stamp','clomp','thump','pound','barge','shove','heave','lunge','clump','tromp','vault','press','drive','storm','trudge','stride','wallow'],
+        move: ['plod','wade','step','push','haul','drag','heft','lug','tow','pace','pivot','barge','shove','heave','lunge','march','stomp','stamp','clomp','thump','pound','tramp'],
         attack: ['hew','ram','maul','rend','bash','chop','hack','crush','smash','slash','smite','gouge','clout','whack','crack','batter','pummel','hammer','sunder','cleave','thrash','wallop'],
         special: ['bulwark','rampart','aegis','shield','bastion','phalanx','warding','ironclad','stalwart','defiant','anvil','tower','wall','guard','block','brace','parry','shove','stance','fortify','buttress','barrier']
       },
@@ -225,7 +225,7 @@
         attack: ['volley','pierce','skewer','longshot','quiver','bullseye','deadeye','marksman','impale','puncture','headshot','crossfire','trajectory','fletching','crosshair','ricochet','broadhead','arbalest','bowstring','quarrel','nocking','feathered'],
         special: ['snare','ambush','tripwire','decoy','stakeout','camouflage','pitfall','deadfall','lure','bait','concealed','hidden','sabotage','entangle','ensnare','trapdoor','covert','clandestine','lurking','waylay','entrap']
       },
-      attackShape: 'line3', attackDmg: 12,
+      attackShape: 'line3', attackDmg: 11,
       special: { kind: 'trap', dmg: 18, stunMs: 2000, cooldownMs: 6000 }
     },
     mage: {
@@ -258,10 +258,28 @@
     return choices[Math.floor(rnd(rs) * choices.length)];
   }
 
-  function otherWords(p, exceptSlot) {
+  // Every slot holds a short queue rather than a single word: the one you can
+  // type now, plus the next two. Reading a freshly revealed word costs a beat
+  // of reaction no matter how long it is, which was flattening the whole
+  // economy — three letters and six letters both came out around the same
+  // speed once you counted the read. With the next words already on screen you
+  // read ahead while typing, so the cost of an action is the typing itself,
+  // which is what makes a short-word class genuinely faster.
+  var QUEUE_DEPTH = 3;
+
+  function liveWords(p) {
     var out = [];
-    for (var s in p.words) if (s !== exceptSlot && p.words[s]) out.push(p.words[s]);
+    for (var s in p.words) {
+      var q = p.words[s];
+      for (var i = 0; i < q.length; i++) out.push(q[i]);
+    }
     return out;
+  }
+
+  // What this slot would fire right now.
+  function currentWord(p, slot) {
+    var q = p.words[slot];
+    return q && q.length ? q[0] : null;
   }
 
   // ---- world ---------------------------------------------------------------
@@ -291,8 +309,11 @@
       x: spawn[0], y: spawn[1],
       words: {}, stunnedUntil: 0, vanishUntil: 0, specialCooldownUntil: 0
     };
+    SLOTS.forEach(function (slot) { p.words[slot] = []; });
     SLOTS.forEach(function (slot) {
-      p.words[slot] = pickWord(slotPool(cls, slot), world.rs, otherWords(p, slot));
+      for (var i = 0; i < QUEUE_DEPTH; i++) {
+        p.words[slot].push(pickWord(slotPool(cls, slot), world.rs, liveWords(p)));
+      }
     });
     world.players[id] = p;
     world.occupancy[key(p.x, p.y)] = id;
@@ -466,8 +487,13 @@
     }
   }
 
+  // The used word leaves, everything shifts up, and a fresh one joins the back
+  // of the queue — so the word you were already reading is the one you get.
   function rerollWord(world, p, slot) {
-    p.words[slot] = pickWord(slotPool(p.cls, slot), world.rs, otherWords(p, slot));
+    var used = p.words[slot].shift();
+    var avoid = liveWords(p);
+    if (used) avoid.push(used);
+    p.words[slot].push(pickWord(slotPool(p.cls, slot), world.rs, avoid));
   }
 
   // Last one standing: null while the match is still contested, a player id
@@ -484,6 +510,7 @@
   return {
     MAP_SIZES: MAP_SIZES, DEFAULT_SIZE: DEFAULT_SIZE, FLOOR: FLOOR, WALL: WALL, RIVER: RIVER,
     MAX_PLAYERS: MAX_PLAYERS, MAX_HP: MAX_HP, CLASSES: CLASSES, SLOTS: SLOTS,
+    QUEUE_DEPTH: QUEUE_DEPTH, currentWord: currentWord,
     createWorld: createWorld, addPlayer: addPlayer, removePlayer: removePlayer,
     resolveAction: resolveAction, checkWinner: checkWinner,
     isStunned: isStunned, isVanished: isVanished,

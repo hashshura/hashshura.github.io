@@ -156,7 +156,10 @@ export class Room {
     if (!p || p.dead) return;
     // The client already clears its buffer on any submit, right or wrong; the
     // server only needs to reject a mismatch, never explain it.
-    if (word.trim().toLowerCase() !== p.words[slot].toLowerCase()) return;
+    // Only the front of the slot's queue can be fired; the two behind it are
+    // shown so you can read ahead, not so you can skip ahead.
+    const live = S.currentWord(p, slot);
+    if (!live || word.trim().toLowerCase() !== live.toLowerCase()) return;
 
     const result = S.resolveAction(this.world, id, slot, Date.now());
     if (!result) return;
