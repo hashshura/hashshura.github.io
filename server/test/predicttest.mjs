@@ -159,6 +159,55 @@ for (let i = 0; i < 360; i++) {
     worstY = Math.max(worstY, Math.abs(pred.pts[StickSim.HIPS].y - sv.y)); }
 }
 release();
+// The actual complaint: does the body visibly jump? Measure the largest
+// single-frame movement while walking. A run is ~4.4px per frame, so anything
+// much beyond that is a correction the player sees as a teleport.
+let worstJump = 0, jumps = 0;
+let last = pred.pts[StickSim.HIPS].x, lastY = pred.pts[StickSim.HIPS].y;
+for (let i = 0; i < 300; i++) {
+  const px = pred.pts[StickSim.HIPS].x;
+  press(px > deck.x + deck.w - 130 ? 20 : (px < deck.x + 130 ? 175 : (i % 120 < 60 ? 175 : 20)));
+  tick(); await new Promise((r) => setImmediate(r));
+  const d = Math.abs(pred.pts[StickSim.HIPS].x - last) + Math.abs(pred.pts[StickSim.HIPS].y - lastY);
+  last = pred.pts[StickSim.HIPS].x; lastY = pred.pts[StickSim.HIPS].y;
+  if (i > 30) { worstJump = Math.max(worstJump, d); if (d > 10) jumps++; }
+}
+release();
+ok('the local body never teleports', worstJump < 10,
+   'worst single-frame move ' + worstJump.toFixed(1) + 'px, ' + jumps + ' frames over 10px');
+
+// Jumping: the server starts the jump a round trip after we do, so for that
+// window the two bodies are at genuinely different heights.
+let worstAir = 0;
+let ly = pred.pts[StickSim.HIPS].y, lx = pred.pts[StickSim.HIPS].x;
+for (let i = 0; i < 300; i++) {
+  press(i % 90 < 8 ? 95 : (i % 40 < 20 ? 175 : 20));      // up, then left/right
+  if (i % 90 === 8) release();
+  tick(); await new Promise((r) => setImmediate(r));
+  const d = Math.abs(pred.pts[StickSim.HIPS].x - lx) + Math.abs(pred.pts[StickSim.HIPS].y - ly);
+  lx = pred.pts[StickSim.HIPS].x; ly = pred.pts[StickSim.HIPS].y;
+  if (i > 20) worstAir = Math.max(worstAir, d);
+}
+release();
+ok('jumping does not teleport the body', worstAir < 16,
+   'worst single-frame move while jumping ' + worstAir.toFixed(1) + 'px');
+
+// Being hit: the server knocks us sideways; the client cannot have predicted it.
+const sbody = room().world.players[srvId];
+StickSim.step(room().world);
+sbody.pts.forEach((q) => { q.ox += 9; q.oy += 4; });     // a sword's shove
+sbody.flail = 26;
+let worstHit = 0;
+lx = pred.pts[StickSim.HIPS].x; ly = pred.pts[StickSim.HIPS].y;
+for (let i = 0; i < 90; i++) {
+  tick(); await new Promise((r) => setImmediate(r));
+  const d = Math.abs(pred.pts[StickSim.HIPS].x - lx) + Math.abs(pred.pts[StickSim.HIPS].y - ly);
+  lx = pred.pts[StickSim.HIPS].x; ly = pred.pts[StickSim.HIPS].y;
+  worstHit = Math.max(worstHit, d);
+}
+ok('taking a hit does not teleport the body', worstHit < 20,
+   'worst single-frame move after a hit ' + worstHit.toFixed(1) + 'px');
+
 ok('gap stays within what latency explains', worstX < 25 + LATENCY * 0.35, 'worst horizontal gap ' + worstX.toFixed(0) + 'px over ' + samples + ' samples');
 ok('no vertical desync', worstY < 40, 'worst vertical gap ' + worstY.toFixed(0) + 'px');
 process.exit(0);

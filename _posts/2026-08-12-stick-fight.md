@@ -426,8 +426,16 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // ---- drawing -------------------------------------------------------------
   // in online mode a point is drawn between the last two snapshots
   var lerpA = 1;
-  function px(q) { return lerpA >= 1 ? q.x : q.ox + (q.x - q.ox) * lerpA; }
-  function py(q) { return lerpA >= 1 ? q.y : q.oy + (q.y - q.oy) * lerpA; }
+  function px(q) {
+    var v = lerpA >= 1 ? q.x : q.ox + (q.x - q.ox) * lerpA;
+    q.dx = v;                     // remember where it was actually drawn
+    return v;
+  }
+  function py(q) {
+    var v = lerpA >= 1 ? q.y : q.oy + (q.y - q.oy) * lerpA;
+    q.dy = v;
+    return v;
+  }
 
   function ink(w, c) { ctx.strokeStyle = c || INK; ctx.lineWidth = w || 2.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
   function txt(s, x, y, size, color, bold, align) {
@@ -901,11 +909,15 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // platforms, and gravity — players do not collide with each other. What cannot
   // be predicted is what other people do to you, so a hit still lands a round
   // trip late; that is the honest limit of this without rollback.
-  var predWorld = null, predMe = null;
+  var predWorld = null, predMe = null, predBad = 0;
   var HIPS_I = S.HIPS;
+  // Escape hatch: localStorage.setItem('sf_predict','0') and reload turns
+  // prediction off, so it can be ruled in or out from the console in seconds.
+  var PREDICT = true;
+  try { PREDICT = localStorage.getItem('sf_predict') !== '0'; } catch (e) {}
 
   function predStart() {
-    if (!world || !myId || !world.players[myId]) return;
+    if (!PREDICT || !world || !myId || !world.players[myId]) return;
     predWorld = S.createWorld(mapSeed || 1);
     predMe = S.addPlayer(predWorld, 'local', 'me', 0);
     predSync(world.players[myId], true);
@@ -917,30 +929,50 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     predMe.name = src.name; predMe.color = src.color;
     predMe.weapon = src.weapon; predMe.ammo = src.ammo; predMe.cd = src.cd;
     predMe.spin = src.spin; predMe.spray = src.spray;
-    // Reconciliation, carefully. The snapshot shows where the server thought we
-    // were when it processed input that left here a round trip ago, so a walking
-    // body is *supposed* to be ahead of it by roughly speed x latency. Blending
-    // toward the snapshot regardless drags the body backwards every 33ms, which
-    // both feels like mud and sets up an oscillation. So: ignore any gap latency
-    // can explain, ease out the middling ones, and take the server's word
-    // outright only when something happened that we could not have predicted —
-    // a hit, a death, a respawn.
+    // Reconciliation, and the rule is: a correction must never be visible as a
+    // jump. Only a death or a respawn teleports the body, because a teleport is
+    // what those are. Everything else is pulled at a capped speed, so the worst
+    // case is a body that glides into place over a few frames.
+    //
+    // A snapshot also shows where the server thought we were when it handled
+    // input that left a round trip ago, so a moving body belongs *ahead* of it by
+    // roughly speed x latency. Gaps that size are left completely alone.
     var err = 0;
     for (var i = 0; i < src.pts.length; i++) {
       err += Math.abs(src.pts[i].x - predMe.pts[i].x) + Math.abs(src.pts[i].y - predMe.pts[i].y);
     }
     err /= src.pts.length;
-    var speed = Math.abs(predMe.pts[HIPS_I].x - predMe.pts[HIPS_I].ox);
-    var allowed = 16 + speed * 8;          // what being ahead of the server looks like
-    var event = src.dead !== predMe.dead || (src.flail > 0 && predMe.flail <= 0);
+    var hips = predMe.pts[HIPS_I];
+    var speed = Math.abs(hips.x - hips.ox) + Math.abs(hips.y - hips.oy);
+    var slack = 18 + speed * 9;
+
+    var teleport = hard || src.dead || predMe.dead;
     predMe.dead = src.dead; predMe.respawn = src.respawn; predMe.flail = src.flail;
-    var mix = hard || event || err > allowed * 4 ? 1 : (err > allowed ? 0.12 : 0);
-    if (!mix) return;
+
+    if (teleport) {
+      for (var t = 0; t < src.pts.length; t++) {
+        var a0 = predMe.pts[t], b0 = src.pts[t];
+        a0.x = b0.x; a0.y = b0.y; a0.ox = b0.ox; a0.oy = b0.oy; a0.g = b0.g;
+      }
+      predBad = 0;
+      return;
+    }
+    if (err <= slack) { predBad = 0; return; }
+
+    // A gap this large for this long is not latency — the two simulations have
+    // genuinely parted company (a different map seed would do it). Rebuild.
+    predBad = err > 150 ? predBad + 1 : 0;
+    if (predBad > 25) { predBad = 0; predStart(); return; }
+
+    var cap = src.flail > 0 ? 6 : 2.2;          // px per snapshot, ~30 a second
     for (var k = 0; k < src.pts.length; k++) {
       var a = predMe.pts[k], b = src.pts[k];
-      a.x += (b.x - a.x) * mix; a.y += (b.y - a.y) * mix;
-      a.ox += (b.ox - a.ox) * mix; a.oy += (b.oy - a.oy) * mix;
-      if (mix === 1) a.g = b.g;
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 0.01) continue;
+      var stepPx = Math.min(cap, d * 0.3);
+      a.x += dx / d * stepPx; a.y += dy / d * stepPx;
+      a.ox += dx / d * stepPx; a.oy += dy / d * stepPx;   // shift history too, or this becomes velocity
     }
   }
 
@@ -1012,6 +1044,16 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         return;
       }
       Wire.decodeSnapshot(ev.data, world, roster, S);
+      // Resume interpolating from the drawn position, not from the previous
+      // snapshot: otherwise a snapshot arriving mid-interpolation makes every
+      // remote body hop forward by whatever was left of the last one.
+      for (var rid in world.players) {
+        var rp = world.players[rid];
+        for (var ri = 0; ri < rp.pts.length; ri++) {
+          var rq = rp.pts[ri];
+          if (rq.dx !== undefined) { rq.ox = rq.dx; rq.oy = rq.dy; }
+        }
+      }
       var nowMs = (window.performance || Date).now();
       // measure the real gap instead of assuming one: the server's rate can
       // change, and interpolating over a longer window than the actual interval
