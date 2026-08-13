@@ -87,6 +87,9 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 #sf-aimpad.down{background:#f1f1e9;cursor:grabbing;}
 
 #sf-help{font-size:12px;color:#777;margin:0 0 18px;line-height:1.6;}
+#sf-cta{font-size:14px;line-height:1.6;color:#555;margin:0 0 26px;padding:14px 16px;
+  border:1.5px dashed #ccc;border-radius:10px;background:#fbfbf7;}
+#sf-cta b{color:#222;}
 #sf-help b{color:#222;}
 
 /* Narrow phones: shrink a little rather than overflowing */
@@ -152,6 +155,11 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   <b>Special (✷ or E):</b> the sword spins a full circle and throws everyone it touches; the gun sprays left and right until the magazine is empty. Both use the weapon up.<br>
   <b>Weapons:</b> <b>drop</b> (or Q) throws yours away. Everyone starts bare-handed (7 damage). Swords (22 plus a heavy shove) and guns (14, 8 rounds) drop onto the map every few seconds — walk into one to pick it up.<br>
   <b>Falling into the pit still kills you</b> — a sword's shove is deadlier than its damage. The map is generated fresh every round.
+</p>
+
+<p id="sf-cta">
+  <b>Got an idea? Leave a comment below.</b><br>
+  New weapons, new specials, a mechanic that ruins everything — suggest it and I will build the good ones.
 </p>
 
 <script src="/assets/js/stickfight-sim.js"></script>
