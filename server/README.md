@@ -98,10 +98,29 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
     player than six people in six rooms.
   Hence `IDLE_CLOSE_MS` being short and heartbeats being 30s apart: an empty room
   that keeps ticking bills duration for nothing.
-- **No client prediction.** Your input goes up, the server decides, the snapshot
-  comes back. At 20Hz with interpolation this reads as slight weight rather than
-  lag, and it keeps the server the only authority. If it ever feels sluggish, the
-  fix is prediction on the local player only, not a faster tick.
+- **Client prediction, local player only.** Your own body is simulated in the
+  browser as well, so it answers the controls immediately; the server's snapshots
+  correct it. Measured against an artificial link: the local body responds in a
+  constant 67ms (that is the body's own acceleration, not the network) whether the
+  round trip is 120ms, 300ms or 600ms, while the server's echo scales with
+  distance. Without it, a non-host waited a full round trip to see their own
+  input, and said so.
+
+  The reconciliation is the subtle part. A snapshot shows where the server thought
+  you were when it handled input that left a round trip ago, so a walking body is
+  *supposed* to sit ahead of it by roughly speed x latency. Blending toward the
+  snapshot regardless drags the body backwards every frame — mud, and then
+  oscillation. So gaps that latency explains are ignored, middling ones eased out
+  at 12%, and only an unpredictable event (a hit, a death, a respawn) or a gap
+  four times larger than latency allows is taken outright. Steady-state
+  disagreement measured 16px at 120ms, 34px at 300ms, 71px at 600ms, with no
+  runaway and no vertical desync.
+
+  What it does not fix: someone *else's* sword still lands a round trip late.
+  That needs rollback, which is a much bigger change.
+- **30Hz snapshots.** Outgoing WebSocket messages are not billed, so the rate costs
+  bandwidth only (~4.5 KB/s for six players). The client interpolates over the gap
+  it actually measures rather than a hardcoded one.
 - **Caps.** Six players per room, forty rooms in the lobby, rooms with no players
   shut their loop down after 45s and drop off the list after 45s of silence. A
   client that stops sending inputs for 20s is disconnected so its stickman is not

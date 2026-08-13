@@ -111,7 +111,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 <div id="sf-stage">
 <div id="sf-score" hidden></div>
 <div id="sf-gear" hidden>
-  <span id="sf-gear-what">✊ TANGAN</span>
+  <span id="sf-gear-what">✊ FISTS</span>
   <span id="sf-gear-dmg"></span>
   <span id="sf-gear-ammo"></span>
   <button type="button" id="sf-drop" disabled>drop</button>
@@ -749,7 +749,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     apCtx.arc(C, C, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
     apCtx.stroke();
 
-    var a = me ? me.aim : (pad.aim || 0);
+    var a = (predMe && mode === 'online') ? predMe.aim : (me ? me.aim : (pad.aim || 0));
     apCtx.strokeStyle = '#222';
     apCtx.lineWidth = W2 * 0.045;
     apCtx.lineCap = 'round';
@@ -777,7 +777,17 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     ctx.setTransform(eff, 0, 0, eff, cv.width / 2 - cam.x * eff, cv.height / 2 - cam.y * eff);
     drawArena(world);
     for (var i = 0; i < world.pickups.length; i++) drawCrate(world.pickups[i]);
-    for (var id in world.players) drawPlayer(world.players[id]);
+    for (var id in world.players) {
+      // the local body is drawn from the prediction, at full confidence: it is
+      // already up to date, so interpolating it would only add lag back
+      if (mode === 'online' && predMe && id === myId) {
+        var keep = lerpA; lerpA = 1;
+        drawPlayer(predMe);
+        lerpA = keep;
+      } else {
+        drawPlayer(world.players[id]);
+      }
+    }
     drawFx(world);
     // hud, in canvas pixels so it stays legible on a small screen
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -804,15 +814,19 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         for (var b = 0; b < bots.length; b++) botThink(world, bots[b], world.t);
         S.step(world);
         checkWin();
+      } else if (mode === 'online' && me && predMe) {
+        gatherInput(me);
+        predMe.input = me.input;         // the same input the server is being sent
+        S.step(predWorld);
       }
     }
-    if (mode === 'online' && me) gatherInput(me);   // read controls, server decides
+    if (mode === 'online' && me && !predMe) gatherInput(me);
     updateCamera();
     // Snapshots land at 20Hz, so draw part-way between the last two rather than
     // stepping 50ms at a time. decodeSnapshot leaves the previous position in
     // ox/oy, which is exactly the "from" this needs.
     lerpA = mode === 'online'
-      ? Math.max(0, Math.min(1, ((now - snapAt) || 0) / 50))
+      ? Math.max(0, Math.min(1, ((now - snapAt) || 0) / snapGap))
       : 1;
     try { render(); } catch (e) { /* never let a draw glitch kill the loop */ }
   }
@@ -860,6 +874,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     if (ws) { try { ws.close(); } catch (e) {} ws = null; }
     mode = 'menu';
     me = null; bots = []; winner = null;
+    predWorld = null; predMe = null;
     pad.l = pad.r = pad.jump = pad.duck = 0;
     showMenu();
     note.textContent = '';
@@ -875,12 +890,66 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     if (winner) startSolo();
   });
 
+  // ---- local prediction ----------------------------------------------------
+  // Without this, your own stickman does not move until your input has been to
+  // the server and back: measured at 48ms from next door, and whatever the
+  // distance costs from further away. The host feels nothing; everyone else feels
+  // all of it. So the local body is simulated here as well, and the server's
+  // version quietly corrects it.
+  //
+  // It works because a body's motion depends only on its own input, the
+  // platforms, and gravity — players do not collide with each other. What cannot
+  // be predicted is what other people do to you, so a hit still lands a round
+  // trip late; that is the honest limit of this without rollback.
+  var predWorld = null, predMe = null;
+  var HIPS_I = S.HIPS;
+
+  function predStart() {
+    if (!world || !myId || !world.players[myId]) return;
+    predWorld = S.createWorld(mapSeed || 1);
+    predMe = S.addPlayer(predWorld, 'local', 'me', 0);
+    predSync(world.players[myId], true);
+  }
+
+  function predSync(src, hard) {
+    if (!predMe || !src) return;
+    predMe.hp = src.hp; predMe.kills = src.kills; predMe.deaths = src.deaths;
+    predMe.name = src.name; predMe.color = src.color;
+    predMe.weapon = src.weapon; predMe.ammo = src.ammo; predMe.cd = src.cd;
+    predMe.spin = src.spin; predMe.spray = src.spray;
+    // Reconciliation, carefully. The snapshot shows where the server thought we
+    // were when it processed input that left here a round trip ago, so a walking
+    // body is *supposed* to be ahead of it by roughly speed x latency. Blending
+    // toward the snapshot regardless drags the body backwards every 33ms, which
+    // both feels like mud and sets up an oscillation. So: ignore any gap latency
+    // can explain, ease out the middling ones, and take the server's word
+    // outright only when something happened that we could not have predicted —
+    // a hit, a death, a respawn.
+    var err = 0;
+    for (var i = 0; i < src.pts.length; i++) {
+      err += Math.abs(src.pts[i].x - predMe.pts[i].x) + Math.abs(src.pts[i].y - predMe.pts[i].y);
+    }
+    err /= src.pts.length;
+    var speed = Math.abs(predMe.pts[HIPS_I].x - predMe.pts[HIPS_I].ox);
+    var allowed = 16 + speed * 8;          // what being ahead of the server looks like
+    var event = src.dead !== predMe.dead || (src.flail > 0 && predMe.flail <= 0);
+    predMe.dead = src.dead; predMe.respawn = src.respawn; predMe.flail = src.flail;
+    var mix = hard || event || err > allowed * 4 ? 1 : (err > allowed ? 0.12 : 0);
+    if (!mix) return;
+    for (var k = 0; k < src.pts.length; k++) {
+      var a = predMe.pts[k], b = src.pts[k];
+      a.x += (b.x - a.x) * mix; a.y += (b.y - a.y) * mix;
+      a.ox += (b.ox - a.ox) * mix; a.oy += (b.oy - a.oy) * mix;
+      if (mix === 1) a.g = b.g;
+    }
+  }
+
   // ---- multiplayer ---------------------------------------------------------
   // The room is authoritative: we send 4-byte inputs and draw the snapshots it
   // sends back. No local prediction, so a swing lands when the server says it
   // did — at 20Hz with interpolation that reads as a slight weight, not as lag.
   var Wire = window.StickWire;
-  var ws = null, roster = [], myId = null, snapAt = 0, myPing = 0, mapSeed = null;
+  var ws = null, roster = [], myId = null, snapAt = 0, snapGap = 34, myPing = 0, mapSeed = null;
   var createBtn = document.getElementById('sf-create');
   var joinBtn = document.getElementById('sf-join');
 
@@ -918,6 +987,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       world = S.createWorld(1);      // replaced as soon as the roster names the seed
       world.players = {};
       bots = []; winner = null; myId = null;
+      predWorld = null; predMe = null;
       mode = 'online';
       showGame();
       last = 0; acc = 0;
@@ -942,8 +1012,15 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         return;
       }
       Wire.decodeSnapshot(ev.data, world, roster, S);
-      snapAt = (window.performance || Date).now();
+      var nowMs = (window.performance || Date).now();
+      // measure the real gap instead of assuming one: the server's rate can
+      // change, and interpolating over a longer window than the actual interval
+      // means always drawing the past
+      if (snapAt) snapGap = Math.max(20, Math.min(120, snapGap * 0.7 + (nowMs - snapAt) * 0.3));
+      snapAt = nowMs;
       me = myId ? world.players[myId] : null;
+      if (me && !predMe) predStart();
+      else if (me) predSync(me, false);
       checkWin();
     };
     ws.onclose = function () {

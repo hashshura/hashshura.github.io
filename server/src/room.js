@@ -16,7 +16,9 @@ import W from '../../assets/js/stickfight-wire.js';
 
 const MAX_PLAYERS = 6;
 const TICK_MS = 1000 / 60;
-const SNAP_EVERY = 3;          // broadcast at 20Hz
+const SNAP_EVERY = 2;          // broadcast at 30Hz. Outgoing WebSocket messages
+                               // are not billed, so the only cost is bandwidth:
+                               // ~4.5 KB/s for six players instead of 3.
 const IDLE_CLOSE_MS = 12000;   // stop ticking soon after the room empties;
                                // an idle loop bills duration for nothing
 const HEARTBEAT_MS = 30000;    // each beat is a billed request on the lobby;
