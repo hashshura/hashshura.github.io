@@ -860,6 +860,9 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         // records blanks.
         var sent = sendInput(predTick);
         var corpse = !!(predMe && predMe.dead);
+        // Any tick we do not simulate leaves a hole, and a hole that still holds a
+        // matching tick number from 256 ticks ago is worse than no history at all.
+        if (corpse || !predMe) stateTick[predTick & 255] = -1;
         inputHist[predTick & 255] = corpse
           // a blank entry, so a replay reaching back across the death — or across
           // the switch — does not re-apply whatever was held down back then
@@ -1000,6 +1003,27 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     predMe = S.addPlayer(predWorld, 'local', 'me', 0);
     for (var pi = 0; pi < predMe.pts.length; pi++) predMe.pts[pi]._pi = pi;
     predOff = null;
+    // Nothing from a previous prediction session survives. The tick ring holds 256
+    // entries, so walking around for four seconds with lag compensation switched
+    // off lines an old entry up with a current tick number — and a snapshot then
+    // "agrees" with a body that was somewhere else entirely, leaving the real
+    // disagreement to be corrected over and over. On flat ground, with nobody
+    // pressing jump, that draws as a stickman bouncing.
+    for (var si = 0; si < stateTick.length; si++) stateTick[si] = -1;
+    // Start exactly where the body is on screen, so switching the switch does not
+    // move it. predSync below still snaps to the server's version, but it measures
+    // the correction from here and eases it in, instead of from a spawn pose.
+    // And clear the draw coordinates left on the snapshot body from when it was the
+    // one being drawn, or the interpolation rewrite above treats them as current.
+    var mineNow = world.players[myId];
+    for (var di = 0; di < mineNow.pts.length; di++) {
+      var qd = predMe.pts[di], bd = mineNow.pts[di];
+      qd.x = bd.dx !== undefined ? bd.dx : bd.x;
+      qd.y = bd.dy !== undefined ? bd.dy : bd.y;
+      qd.ox = qd.x - (bd.x - bd.ox) / SNAP_TICKS;
+      qd.oy = qd.y - (bd.y - bd.oy) / SNAP_TICKS;
+      delete bd.dx; delete bd.dy;
+    }
     predSync(world.players[myId], true);
   }
 
@@ -1264,6 +1288,16 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       // snapshot: otherwise a snapshot arriving mid-interpolation makes every
       // remote body hop forward by whatever was left of the last one.
       for (var rid in world.players) {
+        // Never the predicted body. It is not interpolated — it is drawn from the
+        // prediction — and its ox/oy is the only velocity reference reconciliation
+        // has. Rewriting that to a drawn position corrupts it.
+        //
+        // This is why prediction behaved when switched on from the start and
+        // misbehaved when switched off and on again: with it on, this body is never
+        // drawn and has no draw coordinates, so the loop skipped it. Switching off
+        // draws it once, and from then on the stale coordinates left behind were
+        // copied over its velocity on every single snapshot.
+        if (predMe && rid === myId) continue;
         var rp = world.players[rid];
         for (var ri = 0; ri < rp.pts.length; ri++) {
           var rq = rp.pts[ri];

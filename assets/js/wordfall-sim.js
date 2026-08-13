@@ -123,7 +123,11 @@
       while (x !== tx || y !== ty) {
         if (x !== tx) x += x < tx ? 1 : -1;
         else if (y !== ty) y += y < ty ? 1 : -1;
-        if (grid[y][x] === WALL) grid[y][x] = FLOOR;
+        // Clear whatever is actually blocking here, not just WALL — the
+        // second connectivity pass also blocks on RIVER, and a straight-line
+        // path that happens to cross a river left it blocking, made this a
+        // no-op, and the loop burned its whole guard without ever reconnecting.
+        if (blocks.indexOf(grid[y][x]) !== -1) grid[y][x] = FLOOR;
       }
     }
   }

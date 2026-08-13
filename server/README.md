@@ -125,7 +125,7 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
   checkbox under the controls turns it on and the choice is remembered.
   `PREDICT_DEFAULT` in the post flips the default for everyone.
 
-  Seven things this got wrong, all worth remembering:
+  Eight things this got wrong, all worth remembering:
 
   - **One clock.** The send times were stamped with `Date.now()` and the round trip
     measured against `performance.now()`. Epoch minus time-since-page-load put
@@ -166,6 +166,18 @@ Add a DNS record for `api.ashura.id` pointing at the Worker, uncomment the
     server; velocity comes from our own history when we agree with it, and from the
     snapshot interval when we do not, because a shove is mostly velocity and ours
     would be wrong.
+  - **The predicted body must never be interpolated.** Snapshots arrive at 30Hz, so
+    every body is drawn between the last two — and the origin for that is stored in
+    the same ox/oy the prediction uses as its only velocity reference. With
+    prediction on, this body is drawn from the prediction and so has no draw
+    coordinates, and the rewrite skipped it. Switch prediction off once and the body
+    gets drawn directly; switch it back on and the stale coordinates left behind
+    were copied over its velocity on every snapshot from then on. Which is exactly
+    why it behaved when switched on from the start and misbehaved when switched off
+    and on again — on flat ground, with nobody pressing jump, it drew as a stickman
+    bouncing. The local body is now excluded, its stale draw coordinates cleared,
+    and a restarted prediction begins where the body is on screen so the switch
+    itself does not move it.
   - **Re-anchor when our own clock stalls.** A background tab or a long frame leaves
     the client's tick counter behind the room's, the tick subtraction wraps, and
     every snapshot lands with no usable history. Measured as three-second runs of

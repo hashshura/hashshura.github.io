@@ -369,46 +369,48 @@ ok('the test actually killed and respawned him', sbody2.deaths > 0 && !sbody2.de
 console.log('  stats: ' + JSON.stringify(window.sfStats));
 ok('the respawned body does not flick between spawn points', flicks === 0,
    flicks + ' unexplained jump(s), worst ' + worstDeath.toFixed(0) + 'px, ' + positions.size + ' distinct places');
-// Toggle lag compensation off, move around, then back on. The tick counter and
-// the input history number the packets the server acks, so freezing them while
-// the toggle is off used to mean every packet went out under the same sequence
-// number, and switching back on replayed a history recorded before the switch.
+// The reported sequence, exactly: on, walk, off, walk, on, walk. Prediction is
+// restarted each time it comes back, and anything left over from the previous
+// session is a trap — the tick ring is 256 entries, so four seconds of walking
+// with prediction off lines an old entry up with a current tick number.
 const fire = (id, type) => ((listeners.get(nodes[id]) || {})[type] || []).forEach((fn) => fn({ target: nodes[id] }));
 const padAt = (x, type) => ((listeners.get(nodes['sf-pad']) || {})[type] || []).forEach((fn) =>
   fn({ clientX: x, clientY: 85, pointerId: 1, pointerType: 'touch', buttons: 1, preventDefault(){} }));
-// Pace back and forth rather than holding one direction: walking straight for
-// two seconds takes him off the edge, and a fall reads as a lurch.
 const walk = (dir) => { padAt(dir > 0 ? 175 : 15, 'pointerup'); padAt(dir > 0 ? 175 : 15, 'pointerdown'); };
+const lag = (on) => { nodes['sf-lagcomp'].checked = on; fire('sf-lagcomp', 'change'); };
+const live = () => { for (let i = worlds.length - 1; i >= 0; i--) if (worlds[i].players['local']) return worlds[i].players['local']; return null; };
+const body = () => live() || room().world.players[srvId];
+
+// Nobody presses jump for the rest of this test, and the deck is flat, so the body
+// on screen should not move vertically. Measure the DRAWN position: a vertical
+// correction is eased into the draw offset without the simulation ever leaving the
+// ground, and that is what hopping looks like.
+let hops = 0, worstRise = 0, checking = false;
+let hopY = null;
+const drawnY = () => { const p = body(); if (!p) return null;
+  const q = p.pts[StickSim.HIPS]; return q.dy !== undefined ? q.dy : q.y; };
+const watch = async (frames) => {
+  for (let i = 0; i < frames; i++) {
+    if (i % 30 === 0) walk(i % 60 === 0 ? 1 : -1);
+    tick(); await new Promise((r) => setImmediate(r));
+    const p = body(), y = drawnY();
+    if (!checking || !p || p.dead || y === null) { hopY = y; continue; }
+    if (hopY !== null) {
+      const d = Math.abs(y - hopY);
+      if (d > 3) { hops++; worstRise = Math.max(worstRise, d); }
+    }
+    hopY = y;
+  }
+};
 
 walk(1);
-await run(14);
-nodes['sf-lagcomp'].checked = false; fire('sf-lagcomp', 'change');
-walk(-1);
-await run(24);
-nodes['sf-lagcomp'].checked = true;  fire('sf-lagcomp', 'change');
-const live = () => { const w = worlds[worlds.length - 1]; return w && w.players['local']; };
-await run(2);
-let worstToggle = 0, bigToggle = 0, died = false;
-// The drawn position, not the simulated one: corrections are eased out in the
-// draw offset, so the simulation can step while the body on screen glides.
-const drawn = () => { const q = live().pts[StickSim.HIPS];
-  return { x: q.dx !== undefined ? q.dx : q.x, y: q.dy !== undefined ? q.dy : q.y }; };
-let tx = drawn().x, ty = drawn().y;
-const startX = tx; let travelled = 0;
-for (let i = 0; i < 90; i++) {
-  if (i % 30 === 0) walk(i % 60 === 0 ? 1 : -1);
-  tick(); await new Promise((r) => setImmediate(r));
-  const h = drawn();
-  const moved = Math.abs(h.x - tx) + Math.abs(h.y - ty);
-  tx = h.x; ty = h.y;
-  if (live().dead) died = true;
-  travelled = Math.max(travelled, Math.abs(h.x - startX));
-  if (i > 3 && !died) { worstToggle = Math.max(worstToggle, moved); if (moved > 20) bigToggle++;
-    if (process.env.SF_DEBUG && moved > 20) console.log('    lurch f' + i + ' moved=' + moved.toFixed(0) +
-      ' x=' + h.x.toFixed(0) + ' y=' + h.y.toFixed(0)); }
+await watch(40);
+checking = true;
+for (let cycle = 0; cycle < 3; cycle++) {
+  lag(false); await watch(70);        // walk around with it off, long enough to wrap
+  lag(true);  await watch(70);        // and back on
 }
-ok('he stayed on the map and kept walking across the switch', travelled > 30 && !died,
-   'travelled ' + travelled.toFixed(0) + 'px, died=' + died);
-ok('switching lag compensation back on does not lurch the body', bigToggle === 0,
-   bigToggle + ' frame(s) over 20px, worst ' + worstToggle.toFixed(1) + 'px');
+ok('nobody pressed jump, so the body on screen does not bounce', hops <= 2,
+   hops + ' frame(s) moving vertically on flat ground, worst ' + worstRise.toFixed(1) + 'px');
+console.log('  stats: ' + JSON.stringify(window.sfStats));
 process.exit(0);

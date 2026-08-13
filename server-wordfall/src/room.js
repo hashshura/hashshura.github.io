@@ -17,7 +17,12 @@ import S from '../../assets/js/wordfall-sim.js';
 const MAX_PLAYERS = 6;
 const READY_COUNTDOWN_MS = 5000;
 const HOUSEKEEP_MS = 5000;
-const IDLE_TIMEOUT_MS = 20000;
+// A real player can go well over 20s without sending anything — sitting in
+// the lobby, or just thinking through a mage's word — unlike stick fight
+// where a live player is always producing input. The client pings every 8s
+// specifically so this stays generous without ever hanging onto a socket
+// whose other end is actually gone.
+const IDLE_TIMEOUT_MS = 45000;
 const HEARTBEAT_MS = 30000;
 const RESET_AFTER_MS = 6000;    // how long the "match over" screen holds before the lobby reopens
 const CLASSES = ['rogue', 'fighter', 'ranger', 'mage'];
