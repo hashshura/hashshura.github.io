@@ -93,6 +93,11 @@ export class Room {
     }
 
     const meta = await this.loadMeta();
+    // Durable Objects are created on demand, so any made-up code would
+    // otherwise open a room that nobody created: not in the room list, so
+    // nobody can find you, and never startable since that needs two players.
+    // A room only exists once the lobby has configured it.
+    if (!meta) return new Response('no such room', { status: 404 });
     const name = (url.searchParams.get('name') || 'anon').slice(0, 12);
     const cls = CLASSES.includes(url.searchParams.get('cls')) ? url.searchParams.get('cls') : 'rogue';
     const pass = url.searchParams.get('pw') || '';
