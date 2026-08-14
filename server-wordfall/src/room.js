@@ -302,7 +302,9 @@ export class Room {
         hidden: hideMe,
         stunned: S.isStunned(p, now),
         stunUntil: p.stunnedUntil || 0,
-        stunSpan: p.stunSpan || 0
+        stunSpan: p.stunSpan || 0,
+        // A charged mage is worth seeing coming, so this is public.
+        charged: !!p.charged && (!p.chargedUntil || p.chargedUntil > now)
       };
     }
     const me = this.world.players[viewerId];
@@ -313,6 +315,9 @@ export class Room {
       // Only ever your own: the client counts this down on its own clock to
       // show how much of your vanish is left.
       vanishUntil: me ? me.vanishUntil : 0,
+      chargedUntil: me ? (me.charged ? me.chargedUntil : 0) : 0,
+      // Med kits are on open ground for anyone to take.
+      kits: this.world.kits.map(function (k) { return { x: k.x, y: k.y }; }),
       trap: me && this.world.traps[viewerId] ? this.world.traps[viewerId] : null
     };
   }
@@ -336,7 +341,9 @@ export class Room {
     if (this.effectTimer) { clearTimeout(this.effectTimer); this.effectTimer = null; }
     if (!this.world || this.phase !== 'playing') return;
     const now = Date.now();
-    let next = Infinity;
+    // Kits are on a clock of their own, so the wake-up below has to account for
+    // the next one or a quiet stretch would produce none.
+    let next = this.world.nextKitAt || Infinity;
     for (const id in this.world.players) {
       const p = this.world.players[id];
       if (p.vanishUntil > now) next = Math.min(next, p.vanishUntil);
@@ -345,7 +352,9 @@ export class Room {
     if (next === Infinity) return;
     this.effectTimer = setTimeout(() => {
       this.effectTimer = null;
-      if (this.phase === 'playing') this.broadcastState();
+      if (this.phase !== 'playing' || !this.world) return;
+      S.spawnKits(this.world, Date.now());
+      this.broadcastState();
     }, Math.max(20, next - now + 25));
   }
 

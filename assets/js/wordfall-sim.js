@@ -27,6 +27,12 @@
   var FLOOR = 0, WALL = 1, RIVER = 2;
   var MAX_PLAYERS = 6;
   var MAX_HP = 100;
+  // Med kits keep appearing on open ground. They give every class a way to
+  // recover, which is what lets the mage be a genuine glass cannon rather than
+  // needing a heal of its own — and fetching one costs whoever goes for it a
+  // move, which is dearest for exactly the class whose walking words are
+  // longest.
+  var KIT_EVERY_MS = 9000, KIT_MAX = 3, KIT_HEAL = 25;
 
   function rnd(seedRef) { // small deterministic PRNG so server and predicting clients agree
     seedRef.s = (seedRef.s * 1664525 + 1013904223) % 4294967296;
@@ -282,8 +288,9 @@
         attack: ['projection','discharge','radiance','emanation','coruscate','irradiate','luminance','refraction','brilliance','scintilla','plasmatic','radiation','filament','starfire','resonance','torrent','cascade','conduit','current','voltage','photon','plasma'],
         special: ['sanctuary','restoration','rejuvenate','benediction','absolution','resurgence','convalesce','renewal','regenerate','revitalize','redemption','salvation','restorative','invigorate','replenish','recuperate','consecration','purification','sanctify','wellspring']
       },
-      attackShape: 'beamInf', attackDmg: 13,
-      special: { kind: 'heal', amount: 16, cooldownMs: 10000 }
+      attackShape: 'beamInf', attackDmg: 12,
+      special: { kind: 'supercharge', shape: 'wide3Inf', dmgMult: 2.5,
+                 cooldownMs: 12000, holdMs: 5000 }
     }
   };
 
@@ -342,6 +349,8 @@
     var spawns = pickSpawns(grid, rs, playerCount || MAX_PLAYERS);
     return {
       seed: seed, rs: rs, grid: grid, spawns: spawns, w: n, h: n,
+      kits: [],           // med kits waiting to be walked over
+      nextKitAt: 0,
       players: {},        // id -> player state
       occupancy: {},       // "x,y" -> id
       traps: {},           // id -> {x,y} (owner's active trap, one at a time)
@@ -351,12 +360,42 @@
 
   function key(x, y) { return x + ',' + y; }
 
+  // Called on every resolved action, and by the server's own timer, so kits
+  // keep arriving even during a lull when nobody is typing.
+  function spawnKits(world, now) {
+    if (!world.nextKitAt) world.nextKitAt = now + KIT_EVERY_MS;
+    var guard = 0;
+    while (now >= world.nextKitAt && world.kits.length < KIT_MAX && guard++ < 8) {
+      var free = [];
+      for (var y = 0; y < world.h; y++) {
+        for (var x = 0; x < world.w; x++) {
+          if (world.grid[y][x] !== FLOOR) continue;
+          if (world.occupancy[key(x, y)]) continue;
+          if (kitAt(world, x, y) >= 0) continue;
+          free.push([x, y]);
+        }
+      }
+      if (free.length) {
+        var pick = free[Math.floor(rnd(world.rs) * free.length)];
+        world.kits.push({ x: pick[0], y: pick[1] });
+      }
+      world.nextKitAt = now + KIT_EVERY_MS;
+    }
+  }
+
+  function kitAt(world, x, y) {
+    for (var i = 0; i < world.kits.length; i++) {
+      if (world.kits[i].x === x && world.kits[i].y === y) return i;
+    }
+    return -1;
+  }
+
   function addPlayer(world, id, name, cls) {
     var spawn = world.spawns[world.alive % world.spawns.length];
     var p = {
       id: id, name: name, cls: cls, hp: MAX_HP, dead: false,
       x: spawn[0], y: spawn[1],
-      words: {}, stunnedUntil: 0, stunSpan: 0, vanishUntil: 0, specialCooldownUntil: 0
+      words: {}, stunnedUntil: 0, stunSpan: 0, vanishUntil: 0, specialCooldownUntil: 0, charged: false, chargedUntil: 0
     };
     SLOTS.forEach(function (slot) { p.words[slot] = []; });
     SLOTS.forEach(function (slot) {
@@ -427,6 +466,22 @@
         var wid = world.occupancy[key(wx, wy)];
         if (wid) hits.push(wid);
       }
+    } else if (shape === 'wide3Inf') {
+      // Three lanes abreast, each running to the edge of the map or until its
+      // own wall — so standing behind cover still saves the tiles behind it.
+      var perpW = d[0] !== 0 ? [0, 1] : [1, 0];
+      var maxW = Math.max(gw, gh);
+      for (var lane = -1; lane <= 1; lane++) {
+        for (var stepW = 1; stepW <= maxW; stepW++) {
+          var bx = actor.x + d[0] * stepW + perpW[0] * lane;
+          var by = actor.y + d[1] * stepW + perpW[1] * lane;
+          if (!inBounds(bx, by, gw, gh)) break;
+          if (world.grid[by][bx] === WALL) break;
+          tiles.push([bx, by]);
+          var bid = world.occupancy[key(bx, by)];
+          if (bid && hits.indexOf(bid) === -1) hits.push(bid);
+        }
+      }
     } else if (shape === 'line3' || shape === 'beamInf') {
       var max = shape === 'line3' ? 3 : Math.max(gw, gh);
       for (var step = 1; step <= max; step++) {
@@ -445,6 +500,7 @@
   // object describing what happened (for the caller to broadcast/apply), or
   // null if the action could not be taken (dead, stunned, on cooldown).
   function resolveAction(world, id, slot, now) {
+    spawnKits(world, now);
     var p = world.players[id];
     if (!p || p.dead) return null;
     if (isStunned(p, now)) return null;
@@ -462,6 +518,14 @@
       world.occupancy[key(p.x, p.y)] = id;
       result.ok = true; result.x = p.x; result.y = p.y;
 
+      var gotKit = kitAt(world, p.x, p.y);
+      if (gotKit >= 0) {
+        world.kits.splice(gotKit, 1);
+        var before = p.hp;
+        p.hp = Math.min(MAX_HP, p.hp + KIT_HEAL);
+        result.kit = { x: p.x, y: p.y, healed: p.hp - before, hp: p.hp };
+      }
+
       var trapHit = findTrapAt(world, p.x, p.y, id);
       if (trapHit) {
         var trapDef = CLASSES[world.players[trapHit.owner] ? world.players[trapHit.owner].cls : 'ranger'].special;
@@ -477,10 +541,23 @@
       // detection below is always against real position — an attack that
       // happens to land on a vanished tile still connects, and connecting is
       // exactly what breaks the vanish (see applyDamage).
-      var swept = targetsInShape(world, p, adir, def.attackShape);
+      var charged = !!p.charged && def.special.kind === 'supercharge' &&
+                    (p.chargedUntil === undefined || p.chargedUntil > now);
+      if (p.charged && p.chargedUntil !== undefined && p.chargedUntil <= now) p.charged = false;
+      var useShape = charged ? (def.special.shape || 'wide3Inf') : def.attackShape;
+      var useDmg = charged
+        ? Math.round(def.attackDmg * (def.special.dmgMult || 1.5))
+        : def.attackDmg;
+      var swept = targetsInShape(world, p, adir, useShape);
       var hits = swept.hits.filter(function (hid) { return hid !== id; });
       result.ok = true; result.dir = adir; result.tiles = swept.tiles; result.hits = [];
-      hits.forEach(function (hid) { applyDamage(world, hid, def.attackDmg, now, result); });
+      if (charged) {
+        result.charged = true;
+        p.charged = false;
+        // Spending the charge is what starts the wait for the next one.
+        p.specialCooldownUntil = now + def.special.cooldownMs;
+      }
+      hits.forEach(function (hid) { applyDamage(world, hid, useDmg, now, result); });
     } else if (slot === 'special') {
       if (p.specialCooldownUntil > now) { return result; }
       result.ok = true;
@@ -500,6 +577,13 @@
       } else if (def.special.kind === 'trap') {
         world.traps[id] = { x: p.x, y: p.y };
         result.trapPlaced = { x: p.x, y: p.y };
+      } else if (def.special.kind === 'supercharge') {
+        p.charged = true;
+        p.chargedUntil = def.special.holdMs ? now + def.special.holdMs : Infinity;
+        result.charged = true;
+        result.chargedUntil = p.chargedUntil;
+        // Deliberately no cooldown here: it begins when the charge is spent.
+        p.specialCooldownUntil = 0;
       } else if (def.special.kind === 'heal') {
         p.hp = Math.min(MAX_HP, p.hp + def.special.amount);
         result.healedTo = p.hp;
@@ -562,6 +646,7 @@
     MAP_SIZES: MAP_SIZES, DEFAULT_SIZE: DEFAULT_SIZE, FLOOR: FLOOR, WALL: WALL, RIVER: RIVER,
     MAX_PLAYERS: MAX_PLAYERS, MAX_HP: MAX_HP, CLASSES: CLASSES, SLOTS: SLOTS,
     QUEUE_DEPTH: QUEUE_DEPTH, currentWord: currentWord,
+    KIT_HEAL: KIT_HEAL, KIT_EVERY_MS: KIT_EVERY_MS, spawnKits: spawnKits, kitAt: kitAt,
     createWorld: createWorld, addPlayer: addPlayer, removePlayer: removePlayer,
     resolveAction: resolveAction, checkWinner: checkWinner,
     isStunned: isStunned, isVanished: isVanished,
