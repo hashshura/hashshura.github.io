@@ -17,13 +17,19 @@ import S from '../../assets/js/wordfall-sim.js';
 const MAX_PLAYERS = 6;
 const READY_COUNTDOWN_MS = 3000;
 const HOUSEKEEP_MS = 5000;
-// A real player can go well over 20s without sending anything — sitting in
-// the lobby, or just thinking through a mage's word — unlike stick fight
-// where a live player is always producing input. The client pings every 8s
-// specifically so this stays generous without ever hanging onto a socket
-// whose other end is actually gone.
-const IDLE_TIMEOUT_MS = 45000;
+// Generous on purpose. A closed socket is the reliable signal that somebody
+// left — the browser sends it. This timeout only exists to reap sockets whose
+// other end died without saying so, and it must not fire on a real player: a
+// backgrounded phone has its timers suspended by the OS, so the client
+// heartbeat simply stops arriving while the tab is not visible. At 45s that
+// dropped people out of rooms for glancing at another app.
+const IDLE_TIMEOUT_MS = 300000;
 const HEARTBEAT_MS = 30000;
+// How long a seat is held open after its socket drops. A phone closes the
+// WebSocket within seconds of the tab going to the background, so without this
+// a glance at another app ended the match for you — and rejoining made a second
+// copy of you, because the old seat was still sitting there.
+const RECONNECT_GRACE_MS = 45000;
 const RESET_AFTER_MS = 6000;    // how long the "match over" screen holds before the lobby reopens
 const CLASSES = ['rogue', 'fighter', 'ranger', 'mage'];
 
@@ -31,7 +37,8 @@ export class Room {
   constructor(state, env) {
     this.state = state;
     this.env = env;
-    this.conns = new Map();     // ws -> {id, name, cls, ready, seenAt}
+    this.conns = new Map();     // ws -> seat id, for routing messages
+    this.seats = new Map();     // id -> {id,name,cls,token,ready,seenAt,ws,goneAt}
     this.phase = 'lobby';       // lobby | countdown | playing | ended
     this.world = null;
     this.countdownTimer = null;
@@ -91,55 +98,113 @@ export class Room {
       const given = await sha256(meta.salt + pass);
       if (given !== meta.hash) return new Response('wrong password', { status: 403 });
     }
-    if (this.conns.size >= MAX_PLAYERS) return new Response('room full', { status: 409 });
-    if (this.phase === 'playing') return new Response('match in progress', { status: 409 });
+    // A token means "this is me coming back", and that is allowed mid-match:
+    // the seat, the words and the position are all still there.
+    const token = url.searchParams.get('token') || '';
+    let seat = null;
+    if (token) {
+      for (const st of this.seats.values()) if (st.token === token) { seat = st; break; }
+    }
+    if (!seat) {
+      if (this.seats.size >= MAX_PLAYERS) return new Response('room full', { status: 409 });
+      if (this.phase === 'playing') return new Response('match in progress', { status: 409 });
+    }
 
     const pair = new WebSocketPair();
-    this.accept(pair[1], name, cls);
+    this.accept(pair[1], name, cls, seat);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  accept(ws, name, cls) {
+  accept(ws, name, cls, seat) {
     ws.accept();
-    const id = 'p' + (this.nextId++);
-    this.conns.set(ws, { id, name, cls, ready: false, seenAt: Date.now() });
+    const rejoin = !!seat;
+    if (seat) {
+      // Same seat, new socket. Drop the stale one if it is somehow still here.
+      if (seat.ws && seat.ws !== ws) { this.conns.delete(seat.ws); try { seat.ws.close(1000, 'replaced'); } catch (e) {} }
+      seat.ws = ws;
+      seat.goneAt = 0;
+      seat.seenAt = Date.now();
+    } else {
+      const id = 'p' + (this.nextId++);
+      seat = { id, name, cls, ready: false, seenAt: Date.now(), ws, goneAt: 0,
+               token: crypto.getRandomValues(new Uint8Array(12)).join('') };
+      this.seats.set(id, seat);
+    }
+    this.conns.set(ws, seat.id);
 
     ws.addEventListener('message', (ev) => this.onMessage(ws, ev));
     const bye = () => this.drop(ws);
     ws.addEventListener('close', bye);
     ws.addEventListener('error', bye);
 
-    this.cancelCountdown();   // a joiner needs a chance to ready up too
-    this.broadcastLobby();
+    // The token is how they get back into this exact seat.
+    this.send(ws, JSON.stringify({ type: 'hello', you: seat.id, token: seat.token, phase: this.phase }));
+
+    if (rejoin && this.phase === 'playing') {
+      this.send(ws, JSON.stringify({ type: 'start', seed: this.world.seed, grid: this.world.grid }));
+      this.broadcastState();
+    } else {
+      this.cancelCountdown();   // a joiner needs a chance to ready up too
+      this.broadcastLobby();
+    }
     this.startHousekeeping();
     this.lastBeat = Date.now();
     this.beat().catch(() => {});
   }
 
+  // The socket is gone, but the person may be back in a moment. In the lobby
+  // there is nothing to preserve, so the seat goes at once and the room count is
+  // immediately right. Mid-match the seat is held for the grace period.
   drop(ws) {
-    const c = this.conns.get(ws);
-    if (!c) return;
+    const id = this.conns.get(ws);
+    if (id === undefined) return;
     this.conns.delete(ws);
-    if (this.world) S.removePlayer(this.world, c.id);
-    if (this.phase === 'lobby' || this.phase === 'countdown') {
+    const seat = this.seats.get(id);
+    if (!seat || seat.ws !== ws) return;
+    seat.ws = null;
+
+    if (this.phase === 'playing') {
+      seat.goneAt = Date.now();
+      this.broadcastState();
+    } else {
+      this.seats.delete(id);
+      if (this.world) S.removePlayer(this.world, id);
       this.cancelCountdown();
       this.broadcastLobby();
-    } else if (this.phase === 'playing') {
-      this.checkWinner();
-      this.broadcastState();
     }
     this.lastBeat = Date.now();
     this.beat().catch(() => {});
   }
 
+  // Sockets the runtime has already closed do not always deliver a close event,
+  // and a seat left sitting there is what made a room read 1/6 with nobody in it
+  // and produced a second copy of a returning player.
+  reapDeadSockets() {
+    for (const seat of this.seats.values()) {
+      if (seat.ws && seat.ws.readyState !== undefined && seat.ws.readyState > 1) this.drop(seat.ws);
+    }
+  }
+
+  liveSeats() {
+    return [...this.seats.values()].filter((s) => s.ws);
+  }
+
   onMessage(ws, ev) {
-    const c = this.conns.get(ws);
+    const c = this.seats.get(this.conns.get(ws));
     if (!c) return;
     c.seenAt = Date.now();
     if (typeof ev.data !== 'string') return;
     let msg;
     try { msg = JSON.parse(ev.data); } catch (e) { return; }
 
+    if (msg.type === 'setClass' && (this.phase === 'lobby' || this.phase === 'countdown')) {
+      // Chosen in the room, so everyone can watch each other pick.
+      if (CLASSES.includes(msg.cls)) c.cls = msg.cls;
+      c.ready = false;
+      this.cancelCountdown();
+      this.broadcastLobby();
+      return;
+    }
     if (msg.type === 'ready' && (this.phase === 'lobby' || this.phase === 'countdown')) {
       c.ready = !!msg.ready;
       if (!c.ready) this.cancelCountdown();
@@ -170,7 +235,7 @@ export class Room {
   // ---- lobby / ready-up ----------------------------------------------------
   maybeStartCountdown() {
     if (this.phase !== 'lobby') return;
-    const conns = [...this.conns.values()];
+    const conns = this.liveSeats();
     if (conns.length < 2 || !conns.every((c) => c.ready)) return;
     this.phase = 'countdown';
     this.countdownEndsAt = Date.now() + READY_COUNTDOWN_MS;
@@ -184,7 +249,9 @@ export class Room {
   }
 
   broadcastLobby() {
-    const roster = [...this.conns.values()].map((c) => ({ id: c.id, name: c.name, cls: c.cls, ready: c.ready }));
+    const roster = [...this.seats.values()].map((c) => ({
+      id: c.id, name: c.name, cls: c.cls, ready: c.ready, away: !c.ws
+    }));
     this.sendAll({
       type: 'lobby', phase: this.phase, roster,
       countdownEndsAt: this.phase === 'countdown' ? this.countdownEndsAt : null,
@@ -195,7 +262,7 @@ export class Room {
   // ---- match -----------------------------------------------------------
   startMatch() {
     this.countdownTimer = null;
-    const conns = [...this.conns.values()];
+    const conns = this.liveSeats();
     if (conns.length < 2 || !conns.every((c) => c.ready)) { this.phase = 'lobby'; this.broadcastLobby(); return; }
 
     this.phase = 'playing';
@@ -239,10 +306,10 @@ export class Room {
 
   broadcastState(event) {
     if (!this.world) return;
-    for (const [ws, c] of this.conns) {
-      const payload = this.buildStateFor(c.id);
+    for (const seat of this.liveSeats()) {
+      const payload = this.buildStateFor(seat.id);
       if (event) payload.event = event;
-      this.send(ws, JSON.stringify(payload));
+      this.send(seat.ws, JSON.stringify(payload));
     }
     this.scheduleEffectExpiry();
   }
@@ -282,7 +349,7 @@ export class Room {
     this.phase = 'lobby';
     if (this.effectTimer) { clearTimeout(this.effectTimer); this.effectTimer = null; }
     this.world = null;
-    for (const c of this.conns.values()) c.ready = false;
+    for (const c of this.seats.values()) c.ready = false;
     this.broadcastLobby();
   }
 
@@ -293,7 +360,7 @@ export class Room {
 
   sendAll(obj) {
     const data = JSON.stringify(obj);
-    for (const [ws] of this.conns) this.send(ws, data);
+    for (const seat of this.liveSeats()) this.send(seat.ws, data);
   }
 
   startHousekeeping() {
@@ -301,7 +368,7 @@ export class Room {
     const run = () => {
       this.houseTimer = setTimeout(() => {
         try { this.housekeep(); } catch (e) { /* one bad beat must not kill the room */ }
-        if (this.conns.size === 0) { this.houseTimer = null; return; }
+        if (this.seats.size === 0) { this.houseTimer = null; return; }
         run();
       }, HOUSEKEEP_MS);
     };
@@ -310,8 +377,20 @@ export class Room {
 
   housekeep() {
     const now = Date.now();
-    for (const [ws, c] of this.conns) {
-      if (now - c.seenAt > IDLE_TIMEOUT_MS) { try { ws.close(1001, 'idle'); } catch (e) {} this.drop(ws); }
+    this.reapDeadSockets();
+    for (const seat of [...this.seats.values()]) {
+      if (seat.ws && now - seat.seenAt > IDLE_TIMEOUT_MS) {
+        try { seat.ws.close(1001, 'idle'); } catch (e) {}
+        this.drop(seat.ws);
+        continue;
+      }
+      // Held seat whose owner never came back: now they are really gone.
+      if (!seat.ws && seat.goneAt && now - seat.goneAt > RECONNECT_GRACE_MS) {
+        this.seats.delete(seat.id);
+        if (this.world) S.removePlayer(this.world, seat.id);
+        if (this.phase === 'playing') { this.checkWinner(); this.broadcastState(); }
+        else this.broadcastLobby();
+      }
     }
     if (now - this.lastBeat > HEARTBEAT_MS) {
       this.lastBeat = now;
@@ -325,7 +404,7 @@ export class Room {
     await stub.fetch('https://do/lobby/beat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: this.meta.code, players: this.conns.size, max: MAX_PLAYERS })
+      body: JSON.stringify({ code: this.meta.code, players: this.seats.size, max: MAX_PLAYERS })
     });
   }
 }
