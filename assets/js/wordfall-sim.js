@@ -53,7 +53,7 @@
     spines.forEach(function (spine) {
       var len = spine.horiz ? w : h;
       var doors = [];
-      var numDoors = 1 + (rnd(rs) < 0.5 ? 1 : 0);
+      var numDoors = 2 + (rnd(rs) < 0.6 ? 1 : 0);
       for (var d = 0; d < numDoors; d++) {
         var doorAt = 1 + Math.floor(rnd(rs) * (len - 2));
         var doorW = 1 + Math.floor(rnd(rs) * 2);
@@ -184,6 +184,53 @@
     return spawns;
   }
 
+  // A tile you can only reach from one direction is a camping spot: one player
+  // stands in it, faces the single entrance, and cannot be flanked. This opens
+  // every such tile until each has at least two ways in, which removes dead-end
+  // corridors and one-door pockets without changing the character of the map —
+  // the spines and rivers are still what shape it.
+  function floorNeighbours(grid, x, y) {
+    var h = grid.length, w = grid[0].length, n = 0;
+    for (var i = 0; i < 4; i++) {
+      var d = [[1, 0], [-1, 0], [0, 1], [0, -1]][i];
+      var nx = x + d[0], ny = y + d[1];
+      if (inBounds(nx, ny, w, h) && grid[ny][nx] === FLOOR) n++;
+    }
+    return n;
+  }
+
+  function openDeadEnds(grid, rs) {
+    var h = grid.length, w = grid[0].length;
+    for (var pass = 0; pass < 12; pass++) {
+      var opened = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          if (grid[y][x] !== FLOOR || floorNeighbours(grid, x, y) >= 2) continue;
+          // Prefer breaking through to floor on the far side: that joins two
+          // routes into a loop instead of digging a longer dead end.
+          var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          var pick = null, fallback = null;
+          // One rotation chosen up front, so all four directions get examined
+          // exactly once. Re-rolling inside the loop could inspect the same
+          // direction twice and miss the only openable one, which left a
+          // handful of dead ends standing.
+          var spin = Math.floor(rnd(rs) * 4);
+          for (var i = 0; i < 4; i++) {
+            var d = dirs[(i + spin) % 4];
+            var nx = x + d[0], ny = y + d[1];
+            if (!inBounds(nx, ny, w, h) || grid[ny][nx] === FLOOR) continue;
+            if (!fallback) fallback = [nx, ny];
+            var bx = x + d[0] * 2, by = y + d[1] * 2;
+            if (inBounds(bx, by, w, h) && grid[by][bx] === FLOOR) { pick = [nx, ny]; break; }
+          }
+          var cell = pick || fallback;
+          if (cell) { grid[cell[1]][cell[0]] = FLOOR; opened++; }
+        }
+      }
+      if (!opened) break;
+    }
+  }
+
   function buildMap(rs, w, h) {
     var grid = [];
     for (var y = 0; y < h; y++) grid.push(new Array(w).fill(FLOOR));
@@ -192,6 +239,7 @@
     var numRivers = 1 + (rnd(rs) < 0.5 ? 1 : 0);
     for (var r = 0; r < numRivers; r++) carveRiver(grid, rs, rnd(rs) < 0.5);
     ensureConnected(grid, [WALL, RIVER]);
+    openDeadEnds(grid, rs);
     return grid;
   }
 
@@ -266,6 +314,7 @@
   // read ahead while typing, so the cost of an action is the typing itself,
   // which is what makes a short-word class genuinely faster.
   var QUEUE_DEPTH = 3;
+
 
   function liveWords(p) {
     var out = [];
