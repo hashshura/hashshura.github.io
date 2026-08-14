@@ -76,6 +76,9 @@ export class Room {
         colo: body.colo || '??',
         mapSize: S.MAP_SIZES[body.mapSize] ? body.mapSize : 'medium',
         salt,
+        // An invite key stands in for the password, so a link can be handed to
+        // someone without also handing over the password itself.
+        invite: crypto.getRandomValues(new Uint8Array(9)).join(''),
         hash: body.password ? await sha256(salt + body.password) : null
       };
       await this.state.storage.put('meta', this.meta);
@@ -94,7 +97,9 @@ export class Room {
     const cls = CLASSES.includes(url.searchParams.get('cls')) ? url.searchParams.get('cls') : 'rogue';
     const pass = url.searchParams.get('pw') || '';
 
-    if (meta && meta.hash) {
+    const invite = url.searchParams.get('key') || '';
+    const invited = !!(meta && meta.invite && invite === meta.invite);
+    if (meta && meta.hash && !invited) {
       const given = await sha256(meta.salt + pass);
       if (given !== meta.hash) return new Response('wrong password', { status: 403 });
     }
@@ -255,7 +260,8 @@ export class Room {
     this.sendAll({
       type: 'lobby', phase: this.phase, roster,
       countdownEndsAt: this.phase === 'countdown' ? this.countdownEndsAt : null,
-      room: this.meta ? { code: this.meta.code, name: this.meta.name, mapSize: this.meta.mapSize } : null
+      room: this.meta ? { code: this.meta.code, name: this.meta.name,
+                          mapSize: this.meta.mapSize, invite: this.meta.invite || '' } : null
     });
   }
 
@@ -289,7 +295,9 @@ export class Room {
         cls: p.cls, name: p.name, hp: p.hp, dead: p.dead,
         x: hideMe ? null : p.x, y: hideMe ? null : p.y,
         hidden: hideMe,
-        stunned: S.isStunned(p, now)
+        stunned: S.isStunned(p, now),
+        stunUntil: p.stunnedUntil || 0,
+        stunSpan: p.stunSpan || 0
       };
     }
     const me = this.world.players[viewerId];

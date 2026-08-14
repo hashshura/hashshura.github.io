@@ -356,7 +356,7 @@
     var p = {
       id: id, name: name, cls: cls, hp: MAX_HP, dead: false,
       x: spawn[0], y: spawn[1],
-      words: {}, stunnedUntil: 0, vanishUntil: 0, specialCooldownUntil: 0
+      words: {}, stunnedUntil: 0, stunSpan: 0, vanishUntil: 0, specialCooldownUntil: 0
     };
     SLOTS.forEach(function (slot) { p.words[slot] = []; });
     SLOTS.forEach(function (slot) {
@@ -467,6 +467,7 @@
         var trapDef = CLASSES[world.players[trapHit.owner] ? world.players[trapHit.owner].cls : 'ranger'].special;
         applyDamage(world, id, trapDef.dmg, now, result);
         p.stunnedUntil = now + trapDef.stunMs;
+        p.stunSpan = trapDef.stunMs;
         delete world.traps[trapHit.owner];
         result.trapTriggered = { owner: trapHit.owner };
       }
@@ -494,6 +495,7 @@
         shits.forEach(function (hid) {
           applyDamage(world, hid, def.special.dmg, now, result);
           world.players[hid].stunnedUntil = now + def.special.stunMs;
+          world.players[hid].stunSpan = def.special.stunMs;
         });
       } else if (def.special.kind === 'trap') {
         world.traps[id] = { x: p.x, y: p.y };
