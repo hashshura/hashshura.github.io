@@ -215,6 +215,16 @@ export class Room {
       this.broadcastLobby();
       return;
     }
+    if (msg.type === 'setName') {
+      // Joining by link never shows the menu's name box, so the room is the
+      // only place some players can name themselves.
+      const n = String(msg.name || '').slice(0, 12).trim();
+      if (!n) return;
+      c.name = n;
+      // A lobby message mid-match would drag everyone back to the roster screen.
+      if (this.phase === 'lobby' || this.phase === 'countdown') this.broadcastLobby();
+      return;
+    }
     if (msg.type === 'ready' && (this.phase === 'lobby' || this.phase === 'countdown')) {
       c.ready = !!msg.ready;
       if (!c.ready) this.cancelCountdown();
