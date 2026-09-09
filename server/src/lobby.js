@@ -105,6 +105,9 @@ export class Lobby {
         r.players = body.players | 0;
         r.max = body.max || r.max;
         r.ts = Date.now();
+        // The room knows where it actually runs; what was recorded at creation was
+        // only where its host entered the network. Once the room says, prefer it.
+        if (body.colo) { r.colo = body.colo; r.country = body.country || r.country; }
         if (r.players > 0) r.emptySince = 0;
         else if (!r.emptySince) r.emptySince = Date.now();
         await this.save();

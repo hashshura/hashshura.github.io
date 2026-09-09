@@ -735,7 +735,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   // The score strip. Rebuilt only when the line-up changes and retouched only
   // when a number changes, so it is not doing DOM work sixty times a second.
   var scoreEl = document.getElementById('sf-score');
-  var scoreRows = {}, scoreKey = '', scoreAt = 0;
+  var scoreRows = {}, scoreKey = '', scoreAt = 0, goalEl = null, goalLast = '';
   function drawScore(w) {
     if (!scoreEl) return;
     var now = Date.now();
@@ -765,17 +765,24 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         scoreEl.appendChild(row);
         scoreRows[p.id] = { kills: kills, last: -1 };
       }
-      var goal = document.createElement('span');
-      goal.className = 'goal';
-      goal.textContent = 'first to ' + KILLS_TO_WIN + ' kills' +
-        (mode === 'online' ? (myPing ? ' · ' + myPing + 'ms' : ' · online') : '');
-      scoreEl.appendChild(goal);
+      goalEl = document.createElement('span');
+      goalEl.className = 'goal';
+      goalLast = '';
+      scoreEl.appendChild(goalEl);
     }
     for (var k = 0; k < ids.length; k++) {
       var q = w.players[ids[k]], cell = scoreRows[q.id];
       if (!cell) continue;
       var val = q.kills + (q.dead ? ' ☠' : '');
       if (val !== cell.last) { cell.kills.textContent = val; cell.last = val; }
+    }
+    // The ping moves while the line-up does not, so this is retouched on its own
+    // rather than only when the strip is rebuilt — otherwise it would show
+    // whatever the latency was at the moment the last player joined.
+    if (goalEl) {
+      var txt = 'first to ' + KILLS_TO_WIN + ' kills' +
+        (mode === 'online' ? (myPing ? ' · ' + myPing + 'ms' : ' · online') : '');
+      if (txt !== goalLast) { goalEl.textContent = txt; goalLast = txt; }
     }
   }
 
@@ -987,8 +994,29 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   var SNAP_TICKS = 2;             // the server broadcasts every other tick
   // Visible in the console as window.sfStats, so a player who sees the body
   // misbehave can say which build and which numbers.
-  var sfStats = { build: 'predict-3', rtt: 0, err: 0, errMax: 0, agree: 0, fix: 0, snap: 0, resync: 0, gap: 0 };
+  var sfStats = { build: 'predict-4', rtt: 0, err: 0, errMax: 0, agree: 0, fix: 0, snap: 0, resync: 0, gap: 0 };
   window.sfStats = sfStats;
+
+  // The round trip, measured on the live socket: the server echoes back the input
+  // sequence it last applied, and our sequence numbers are our own tick numbers,
+  // so the age of the packet that ack names is the round trip. `held` counts the
+  // ticks the server has been re-using that input for want of a newer one — those
+  // are ticks of our silence, not of travel, so only a fresh ack measures anything.
+  //
+  // This lives out here rather than inside predSync because it is not a prediction
+  // concern. It ran in there for a while, which meant switching lag compensation
+  // off froze the readout at whatever it happened to say, and the number on screen
+  // then quietly described a connection from several minutes ago.
+  function measureRtt(src) {
+    if (!src) return;
+    var t0 = sentAt[(src.ack || 0) & 255];
+    if (!t0 || (src.held || 0) > 1) return;
+    rttEst = Math.max(0, Math.min(900, rttEst * 0.7 + Math.min(900, Date.now() - t0) * 0.3));
+    sfStats.rtt = Math.round(rttEst);
+    // What the HUD shows. The menu measured an HTTP round trip through the Worker
+    // to a possibly-sleeping room; this is the socket the fight actually runs on.
+    myPing = sfStats.rtt;
+  }
 
   function recordState(t) {
     var a = stateHist[t & 255];
@@ -1001,6 +1029,12 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   }
   // Off unless asked for, and remembered per browser once it has been touched.
   // Flip PREDICT_DEFAULT to turn it on for everyone.
+  //
+  // Tried on, reverted: it reads as worse, not better. Waiting a round trip is at
+  // least honest — the body is late but it is never wrong. Prediction trades that
+  // for a body that is on time and occasionally wrong, and a correction you can
+  // see is more distracting than a delay you have stopped noticing. Worth another
+  // go only once sfStats.snap is rare enough that the corrections stop showing.
   var PREDICT_DEFAULT = false;
   var PREDICT = PREDICT_DEFAULT;
   try {
@@ -1073,10 +1107,6 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     // a shove, a pickup, anything the local body could not know about — rewinds to
     // the server's version and replays our inputs forward from there.
     var now = Date.now();
-    var t0 = sentAt[(src.ack || 0) & 255];
-    if (t0 && (src.held || 0) <= 1) rttEst = Math.max(0, Math.min(900, rttEst * 0.7 + Math.min(900, now - t0) * 0.3));
-    sfStats.rtt = Math.round(rttEst);
-
     var errSeen = -1;
     var at = ((src.ack || 0) + (src.held || 0)) & 0xffff;   // the tick this describes
     var gap = (predTick - at) & 0xffff;                     // how far we have run since
@@ -1246,6 +1276,25 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       .catch(function () { return 9999; });
   }
 
+  // Twelve rooms used to be pinged in one Promise.all, which meant twelve requests
+  // leaving at once and then queueing — on a phone's uplink each one waits behind
+  // the others, and every room comes back looking further away than it is. Two at
+  // a time keeps the list quick without the measurements inflating each other.
+  function pingAll(rooms) {
+    var out = new Array(rooms.length), next = 0;
+    function worker() {
+      if (next >= rooms.length) return Promise.resolve();
+      var i = next++, r = rooms[i];
+      return pingRoom(r.code).then(function (ms) {
+        r.ping = ms; out[i] = r;
+        return worker();
+      });
+    }
+    var lanes = [];
+    for (var k = 0; k < Math.min(2, rooms.length); k++) lanes.push(worker());
+    return Promise.all(lanes).then(function () { return out; });
+  }
+
   // Fake latency, for testing the netcode without a VPN or a friend abroad.
   // ?lag=150 on the URL delays every packet in both directions by 150ms, so a
   // second tab can be given a 300ms round trip and played side by side with a
@@ -1275,6 +1324,8 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
               encodeURIComponent(name) + '&pw=' + encodeURIComponent(password || '');
     ws = lagWrap(new WebSocket(url));
     ws.binaryType = 'arraybuffer';
+    // Only a seed, so the strip has something to show before the first snapshot.
+    // measureRtt overwrites it a fraction of a second later with the real thing.
     myPing = (ping || 0) + FAKE_LAG * 2;
 
     ws.onopen = function () {
@@ -1333,6 +1384,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       if (snapAt) snapGap = Math.max(20, Math.min(120, snapGap * 0.7 + (nowMs - snapAt) * 0.3));
       snapAt = nowMs;
       me = myId ? world.players[myId] : null;
+      measureRtt(me);
       if (me && !predMe) predStart();
       else if (me) predSync(me, false);
       checkWin();
@@ -1351,9 +1403,7 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     api('/lobby/list').then(function (data) {
       var rooms = (data.rooms || []).slice(0, 12);
       if (!rooms.length) { roomsEl.innerHTML = '<div>no rooms yet — create one?</div>'; return; }
-      return Promise.all(rooms.map(function (r) {
-        return pingRoom(r.code).then(function (ms) { r.ping = ms; return r; });
-      })).then(function (list) {
+      return pingAll(rooms).then(function (list) {
         list.sort(function (a, b) { return a.ping - b.ping; });   // nearest first
         roomsEl.innerHTML = '';
         list.forEach(function (r) {

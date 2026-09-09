@@ -37,6 +37,7 @@ export class Room {
     this.lastBeat = 0;
     this.emptyAt = Date.now();
     this.meta = null;                  // {code,name,hash,salt,colo}
+    this.place = null;                 // {colo,country} — where this object runs
     this.mapSeed = 0;
     this.nextId = 1;
   }
@@ -225,14 +226,41 @@ export class Room {
     }
   }
 
+  // Where this object actually woke up. The lobby could only record the colo that
+  // served the creator's HTTP request — where the host entered the network, which
+  // is not where the room was then placed. A Jakarta host whose room lands in
+  // Tokyo was labelled 🇮🇩 CGK, so the flag next to the ping agreed with everyone's
+  // expectations and told them nothing. This asks from the inside instead.
+  //
+  // request.cf is no help here: the config call arrives as a DO-to-DO subrequest,
+  // which carries no cf object. So the object looks itself up once and remembers.
+  async whereAmI() {
+    if (this.place) return this.place;
+    this.place = (await this.state.storage.get('place')) || null;
+    if (this.place) return this.place;
+    try {
+      const res = await fetch('https://workers.cloudflare.com/cf.json');
+      const cf = await res.json();
+      this.place = { colo: cf.colo || '??', country: (cf.country || '').toUpperCase() };
+    } catch (e) {
+      // Not worth a retry storm — the lobby keeps whatever it had.
+      return null;
+    }
+    await this.state.storage.put('place', this.place);
+    return this.place;
+  }
+
   async beat() {
     if (!this.meta) return;
+    const place = await this.whereAmI();
     const stub = this.env.LOBBY.get(this.env.LOBBY.idFromName('global'));
     await stub.fetch('https://do/lobby/beat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        code: this.meta.code, players: this.conns.size, max: MAX_PLAYERS
+        code: this.meta.code, players: this.conns.size, max: MAX_PLAYERS,
+        colo: place ? place.colo : undefined,
+        country: place ? place.country : undefined
       })
     });
   }
