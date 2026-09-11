@@ -105,6 +105,20 @@ if (threw) { console.log('\n1 FAILED'); process.exit(1); }
 // never running any of it.
 ok('it ran to the end (late controls are wired)', !!el('sf-solo')._l.click);
 
+console.log('the invite link is reachable during a fight:');
+// It lived inside the round-over panel once, which meant the only way to copy a
+// link was to finish a round first — the opposite of when you want one. The
+// panel is hidden while fighting, so anything inside it is too.
+{
+  const html = fs.readFileSync(POST, 'utf8');
+  const panel = /<div id="sf-room"[\s\S]*?\n  <\/div>/.exec(html);
+  ok('the round-over panel is still in the markup', !!panel);
+  ok('and the invite button is NOT inside it',
+     !!panel && !/id="sf-invite"/.test(panel[0]));
+  ok('nor is the invite link box',
+     !!panel && !/id="sf-invite-url"/.test(panel[0]));
+}
+
 console.log('the room panel:');
 ok('the panel exists and starts hidden', el('sf-room').hidden === true);
 ok('ready is wired', !!el('sf-ready')._l.click);

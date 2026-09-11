@@ -87,7 +87,14 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 #sf-room input{font:inherit;font-size:16px;padding:10px 12px;border:1.5px solid #ccc;border-radius:9px;
   background:#fff;min-width:140px;}
 #sf-countdown{font-size:14px;font-weight:bold;min-height:1.2em;}
-#sf-invite-url{width:min(420px,92%);font-size:12px;}
+
+/* The invite sits over the arena next to the menu button, not in the round-over
+   panel: you want to hand the link out before the fight, not after it. */
+#sf-invite{position:absolute;top:7px;left:7px;z-index:7;font:inherit;font-size:12px;font-weight:bold;
+  padding:8px 11px;border:1.5px solid #bbb;border-radius:8px;background:rgba(251,251,247,.92);
+  color:#555;cursor:pointer;}
+#sf-invite-url{position:absolute;top:44px;left:7px;z-index:7;width:min(320px,70%);font:inherit;
+  font-size:12px;padding:7px 9px;border:1.5px solid #bbb;border-radius:8px;background:#fff;}
 #sf-invite-url[hidden],#sf-invite[hidden]{display:none;}
 #sf-exit{position:absolute;top:7px;right:7px;z-index:5;font:inherit;font-size:12px;font-weight:bold;padding:8px 11px;border:1.5px solid #bbb;border-radius:8px;background:rgba(251,251,247,.92);color:#555;cursor:pointer;}
 #sf-exit[hidden]{display:none;}
@@ -160,12 +167,13 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       <button id="sf-ready">Ready</button>
       <input id="sf-roomname" maxlength="12" placeholder="your name" />
     </div>
-    <div class="row">
-      <button id="sf-invite" class="ghost" hidden>Copy invite link</button>
-    </div>
-    <input id="sf-invite-url" hidden readonly>
     <p class="sub" id="sf-room-sub"></p>
   </div>
+  <!-- Outside the round-over panel on purpose. Inside it, the link could only be
+       copied once somebody had already won, which is the opposite of when you
+       want to invite people. -->
+  <button id="sf-invite" hidden title="copy a link that drops a friend straight into this room">🔗 invite</button>
+  <input id="sf-invite-url" hidden readonly>
   <div id="sf-menu">
     <h2>🥢 STICK FIGHT</h2>
     <p id="sf-tagline">Ragdoll stickmen. The sword shoves hard, the gun reaches far, and the pit forgives nothing.</p>
@@ -1482,6 +1490,8 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     sendJson({ type: 'setName', name: n });
   });
 
+  var INVITE_LABEL = '🔗 invite';
+
   function inviteLink(code, key) {
     var base = window.location.origin + window.location.pathname;
     return base + '?room=' + encodeURIComponent(code) + (key ? '&key=' + encodeURIComponent(key) : '');
@@ -1497,8 +1507,8 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(url).then(function () {
-        inviteBtn.textContent = 'Link copied';
-        setTimeout(function () { inviteBtn.textContent = 'Copy invite link'; }, 1600);
+        inviteBtn.textContent = '✓ copied';
+        setTimeout(function () { inviteBtn.textContent = INVITE_LABEL; }, 1600);
       }).catch(reveal);
     } else reveal();
   });
