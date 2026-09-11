@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "test": "node test/roomkittest.cjs && node test/wiretest.cjs && node test/clienttest.mjs",
+    "test:live": "node test/roomtest.mjs && node test/roundtest.mjs",
+    "test:all": "npm test && npm run test:live"
   },
   "devDependencies": {
     "wrangler": "^4.121.0",

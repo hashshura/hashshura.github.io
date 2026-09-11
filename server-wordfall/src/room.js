@@ -13,6 +13,7 @@
  * must not appear on anyone else's client.
  */
 import S from '../../assets/js/wordfall-sim.js';
+import K from '../../assets/js/roomkit.js';
 
 const MAX_PLAYERS = 6;
 const READY_COUNTDOWN_MS = 3000;
@@ -41,8 +42,17 @@ export class Room {
     this.seats = new Map();     // id -> {id,name,cls,token,ready,seenAt,ws,goneAt}
     this.phase = 'lobby';       // lobby | countdown | playing | ended
     this.world = null;
-    this.countdownTimer = null;
-    this.countdownEndsAt = 0;
+    // The ready countdown is roomkit's, shared with stick fight. The seat book
+    // above is not: a lobby seat here is dropped the moment its socket goes,
+    // while mid-match it is held — a split that is this game's own and would
+    // only make the shared version harder to read.
+    this.gate = new K.ReadyGate({
+      members: () => this.liveSeats(),
+      min: 2,
+      countdownMs: READY_COUNTDOWN_MS,
+      onStart: () => this.startMatch(),
+      onChange: () => this.onGateChange()
+    });
     this.houseTimer = null;
     this.effectTimer = null;
     this.lastBeat = 0;
@@ -78,7 +88,7 @@ export class Room {
         salt,
         // An invite key stands in for the password, so a link can be handed to
         // someone without also handing over the password itself.
-        invite: crypto.getRandomValues(new Uint8Array(9)).join(''),
+        invite: K.makeInvite(),
         hash: body.password ? await sha256(salt + body.password) : null
       };
       await this.state.storage.put('meta', this.meta);
@@ -98,13 +108,11 @@ export class Room {
     // nobody can find you, and never startable since that needs two players.
     // A room only exists once the lobby has configured it.
     if (!meta) return new Response('no such room', { status: 404 });
-    const name = (url.searchParams.get('name') || 'anon').slice(0, 12);
+    const name = K.cleanName(url.searchParams.get('name'), 12, 'anon');
     const cls = CLASSES.includes(url.searchParams.get('cls')) ? url.searchParams.get('cls') : 'rogue';
     const pass = url.searchParams.get('pw') || '';
 
-    const invite = url.searchParams.get('key') || '';
-    const invited = !!(meta && meta.invite && invite === meta.invite);
-    if (meta && meta.hash && !invited) {
+    if (meta && meta.hash && !K.inviteOk(meta, url.searchParams.get('key'))) {
       const given = await sha256(meta.salt + pass);
       if (given !== meta.hash) return new Response('wrong password', { status: 403 });
     }
@@ -137,7 +145,7 @@ export class Room {
     } else {
       const id = 'p' + (this.nextId++);
       seat = { id, name, cls, ready: false, seenAt: Date.now(), ws, goneAt: 0,
-               token: crypto.getRandomValues(new Uint8Array(12)).join('') };
+               token: K.makeToken() };
       this.seats.set(id, seat);
     }
     this.conns.set(ws, seat.id);
@@ -154,7 +162,7 @@ export class Room {
       this.send(ws, JSON.stringify({ type: 'start', seed: this.world.seed, grid: this.world.grid }));
       this.broadcastState();
     } else {
-      this.cancelCountdown();   // a joiner needs a chance to ready up too
+      this.gate.rosterChanged();   // a joiner needs a chance to ready up too
       this.broadcastLobby();
     }
     this.startHousekeeping();
@@ -210,15 +218,16 @@ export class Room {
     if (msg.type === 'setClass' && (this.phase === 'lobby' || this.phase === 'countdown')) {
       // Chosen in the room, so everyone can watch each other pick.
       if (CLASSES.includes(msg.cls)) c.cls = msg.cls;
-      c.ready = false;
-      this.cancelCountdown();
+      // Changing your mind about a class un-readies you: the room agreed to
+      // start against a line-up that no longer exists.
+      this.gate.set(c, false);
       this.broadcastLobby();
       return;
     }
     if (msg.type === 'setName') {
       // Joining by link never shows the menu's name box, so the room is the
       // only place some players can name themselves.
-      const n = String(msg.name || '').slice(0, 12).trim();
+      const n = K.cleanName(msg.name, 12);
       if (!n) return;
       c.name = n;
       // A lobby message mid-match would drag everyone back to the roster screen.
@@ -226,10 +235,8 @@ export class Room {
       return;
     }
     if (msg.type === 'ready' && (this.phase === 'lobby' || this.phase === 'countdown')) {
-      c.ready = !!msg.ready;
-      if (!c.ready) this.cancelCountdown();
-      this.broadcastLobby();
-      this.maybeStartCountdown();
+      // set() re-decides and calls back into onGateChange, which broadcasts.
+      this.gate.set(c, !!msg.ready);
     } else if (msg.type === 'action' && this.phase === 'playing') {
       this.handleAction(c.id, msg.slot, msg.word);
     }
@@ -253,18 +260,22 @@ export class Room {
   }
 
   // ---- lobby / ready-up ----------------------------------------------------
+  // The phase is derived from the gate rather than tracked alongside it, so the
+  // two can never disagree about whether a countdown is running.
+  onGateChange() {
+    if (this.phase === 'lobby' || this.phase === 'countdown') {
+      this.phase = this.gate.counting() ? 'countdown' : 'lobby';
+      this.broadcastLobby();
+    }
+  }
+
   maybeStartCountdown() {
-    if (this.phase !== 'lobby') return;
-    const conns = this.liveSeats();
-    if (conns.length < 2 || !conns.every((c) => c.ready)) return;
-    this.phase = 'countdown';
-    this.countdownEndsAt = Date.now() + READY_COUNTDOWN_MS;
-    this.countdownTimer = setTimeout(() => this.startMatch(), READY_COUNTDOWN_MS);
-    this.broadcastLobby();
+    if (this.phase !== 'lobby' && this.phase !== 'countdown') return;
+    this.gate.evaluate();
   }
 
   cancelCountdown() {
-    if (this.countdownTimer) { clearTimeout(this.countdownTimer); this.countdownTimer = null; }
+    this.gate.cancel();
     if (this.phase === 'countdown') this.phase = 'lobby';
   }
 
@@ -274,7 +285,7 @@ export class Room {
     }));
     this.sendAll({
       type: 'lobby', phase: this.phase, roster,
-      countdownEndsAt: this.phase === 'countdown' ? this.countdownEndsAt : null,
+      countdownEndsAt: this.gate.state().endsAt,
       room: this.meta ? { code: this.meta.code, name: this.meta.name,
                           mapSize: this.meta.mapSize, invite: this.meta.invite || '' } : null
     });
@@ -282,7 +293,7 @@ export class Room {
 
   // ---- match -----------------------------------------------------------
   startMatch() {
-    this.countdownTimer = null;
+    this.gate.cancel();
     const conns = this.liveSeats();
     if (conns.length < 2 || !conns.every((c) => c.ready)) { this.phase = 'lobby'; this.broadcastLobby(); return; }
 
@@ -381,7 +392,9 @@ export class Room {
     this.phase = 'lobby';
     if (this.effectTimer) { clearTimeout(this.effectTimer); this.effectTimer = null; }
     this.world = null;
-    for (const c of this.seats.values()) c.ready = false;
+    // clear() un-readies everyone and stops any countdown in one go, so the
+    // lobby cannot reopen with a stale flag already holding it half-started.
+    this.gate.clear();
     this.broadcastLobby();
   }
 

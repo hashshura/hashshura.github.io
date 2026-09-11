@@ -62,6 +62,33 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 #sf-rooms div{display:flex;justify-content:space-between;gap:8px;padding:12px 11px;border:1px dashed #ccc;border-radius:8px;margin-bottom:6px;cursor:pointer;}
 #sf-rooms div:active{background:#eee;}
 #sf-note{font-size:12px;color:#999;text-align:center;padding:0 12px;}
+
+/* The between-rounds panel. Same furniture as the menu, over the frozen arena
+   rather than instead of it: the last moment of the fight stays visible behind
+   the scores, which is most of the fun of losing. */
+#sf-room{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;background:rgba(251,251,247,.93);border-radius:8px;padding:14px 0;overflow:auto;}
+#sf-room[hidden]{display:none;}
+#sf-room h3{margin:0;font-size:clamp(17px,4.6vw,23px);}
+#sf-room .sub{margin:0;font-size:12px;color:#888;text-align:center;padding:0 14px;}
+#sf-final{width:min(400px,92%);font-size:15px;}
+#sf-final .r{display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px dashed #ccc;
+  border-radius:8px;margin-bottom:5px;}
+#sf-final .r.win{border:2px solid #222;font-weight:bold;}
+#sf-final .r.away{opacity:.45;}
+#sf-final .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+#sf-final .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#sf-final .k{font-variant-numeric:tabular-nums;}
+#sf-final .st{font-size:12px;color:#888;min-width:5.5em;text-align:right;}
+#sf-room .row{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;padding:0 12px;}
+#sf-room button{font:inherit;font-size:16px;font-weight:bold;padding:12px 18px;border:2px solid #222;
+  border-radius:10px;background:#222;color:#fbfbf7;cursor:pointer;}
+#sf-room button.ghost{background:#fbfbf7;color:#222;}
+#sf-room input{font:inherit;font-size:16px;padding:10px 12px;border:1.5px solid #ccc;border-radius:9px;
+  background:#fff;min-width:140px;}
+#sf-countdown{font-size:14px;font-weight:bold;min-height:1.2em;}
+#sf-invite-url{width:min(420px,92%);font-size:12px;}
+#sf-invite-url[hidden],#sf-invite[hidden]{display:none;}
 #sf-exit{position:absolute;top:7px;right:7px;z-index:5;font:inherit;font-size:12px;font-weight:bold;padding:8px 11px;border:1.5px solid #bbb;border-radius:8px;background:rgba(251,251,247,.92);color:#555;cursor:pointer;}
 #sf-exit[hidden]{display:none;}
 
@@ -125,6 +152,20 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
 <div id="sf-wrap" class="with-menu">
   <canvas id="sf-canvas" width="960" height="540"></canvas>
   <button id="sf-exit" hidden title="back to the menu (Esc)">✕ menu</button>
+  <div id="sf-room" hidden>
+    <h3 id="sf-room-title">Round over</h3>
+    <div id="sf-final"></div>
+    <div id="sf-countdown"></div>
+    <div class="row">
+      <button id="sf-ready">Ready</button>
+      <input id="sf-roomname" maxlength="12" placeholder="your name" />
+    </div>
+    <div class="row">
+      <button id="sf-invite" class="ghost" hidden>Copy invite link</button>
+    </div>
+    <input id="sf-invite-url" hidden readonly>
+    <p class="sub" id="sf-room-sub"></p>
+  </div>
   <div id="sf-menu">
     <h2>🥢 STICK FIGHT</h2>
     <p id="sf-tagline">Ragdoll stickmen. The sword shoves hard, the gun reaches far, and the pit forgives nothing.</p>
@@ -182,6 +223,15 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   var note = document.getElementById('sf-note');
   var roomsEl = document.getElementById('sf-rooms');
   var nameEl = document.getElementById('sf-name');
+  var roomPanel = document.getElementById('sf-room');
+  var roomTitle = document.getElementById('sf-room-title');
+  var roomSub = document.getElementById('sf-room-sub');
+  var finalEl = document.getElementById('sf-final');
+  var countdownEl = document.getElementById('sf-countdown');
+  var readyBtn = document.getElementById('sf-ready');
+  var roomNameEl = document.getElementById('sf-roomname');
+  var inviteBtn = document.getElementById('sf-invite');
+  var inviteUrlEl = document.getElementById('sf-invite-url');
   var wrap = document.getElementById('sf-wrap');
   var controls = document.getElementById('sf-controls');
   var ap = document.getElementById('sf-aimpad');
@@ -202,7 +252,17 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   var world = null, me = null, mode = 'menu', bots = [], winner = null;
   var scale = 1, camY = 0;
 
+  // The room's own state, as distinct from the fight's: which phase we are in
+  // between rounds, whether we have pressed ready, and the two secrets that let
+  // us back in — the invite key for the room and the token for our own seat.
+  var phase = 'fighting', iAmReady = false, finalTable = null;
+  var roomCode = '', roomKey = '', seatToken = '', roomInvite = '';
+  // Reconnect bookkeeping. `leaving` separates a close we asked for from one the
+  // network handed us, so pressing "menu" does not start a reconnect loop.
+  var lastPassword = '', retries = 0, retryTimer = null, leaving = false;
+
   try { nameEl.value = localStorage.getItem('sf_name') || ''; } catch (e) {}
+  roomNameEl.value = nameEl.value;
 
   function sizeCanvas() {
     var wCss = cv.clientWidth || 960;
@@ -870,6 +930,11 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
         for (var b = 0; b < bots.length; b++) botThink(world, bots[b], world.t);
         S.step(world);
         checkWin();
+      } else if (mode === 'online' && phase === 'over') {
+        // Between rounds the server has stopped stepping, so predicting forward
+        // would walk our body away from a world that is no longer moving — and
+        // then snap it back the instant the next round's first snapshot lands.
+        continue;
       } else if (mode === 'online' && me) {
         gatherInput(me);
         // The tick counter and the input history number the packets the server
@@ -954,10 +1019,20 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   }
   function leaveMatch() {
     if (mode === 'menu') return;
+    // Deliberate: give up the seat rather than reconnecting into it, and drop the
+    // token so a later join arrives as a new player with a clean score.
+    leaving = true;
+    seatToken = '';
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
     if (ws) { try { ws.close(); } catch (e) {} ws = null; }
     mode = 'menu';
     me = null; bots = []; winner = null;
     predWorld = null; predMe = null;
+    phase = 'fighting'; iAmReady = false; finalTable = null;
+    roomPanel.hidden = true;
+    inviteBtn.hidden = true;
+    inviteUrlEl.hidden = true;
+    stopCountdown();
     pad.l = pad.r = pad.jump = pad.duck = 0;
     showMenu();
     note.textContent = '';
@@ -1316,12 +1391,134 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
     return function (ev) { setTimeout(function () { fn(ev); }, FAKE_LAG); };
   }
 
-  function connect(code, password, ping) {
+  // ---- the room panel ------------------------------------------------------
+  // Shown between rounds, over the frozen arena. During a fight it is not there
+  // at all: dropping in is the point of the game, so nothing gates it.
+
+  function sendJson(o) {
+    if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(o)); } catch (e) {} }
+  }
+
+  function renderRoom() {
+    if (mode !== 'online' || phase !== 'over') {
+      roomPanel.hidden = true;
+      stopCountdown();
+      return;
+    }
+    roomPanel.hidden = false;
+    var table = finalTable && finalTable.length ? finalTable : null;
+    var winnerRow = table && table[0];
+    roomTitle.textContent = winnerRow && winnerRow.won
+      ? winnerRow.name + ' wins'
+      : (winnerRow ? winnerRow.name + ' leads' : 'Round over');
+
+    finalEl.innerHTML = '';
+    // The live roster carries ready flags and who is away; the final table
+    // carries the scores. They are keyed by name because the table is a frozen
+    // snapshot and a seat may have been re-slotted since.
+    var readyBy = {}, awayBy = {};
+    for (var i = 0; i < roster.length; i++) {
+      if (!roster[i]) continue;
+      readyBy[roster[i].name] = !!roster[i].ready;
+      awayBy[roster[i].name] = !!roster[i].away;
+    }
+    (table || []).forEach(function (r, idx) {
+      var row = document.createElement('div');
+      row.className = 'r' + (r.won ? ' win' : '') + (awayBy[r.name] ? ' away' : '');
+      var dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = TEAM[idx % TEAM.length];
+      var nm = document.createElement('span');
+      nm.className = 'nm';
+      nm.textContent = r.name;
+      var k = document.createElement('span');
+      k.className = 'k';
+      k.textContent = r.kills + ' / ' + r.deaths;
+      var st = document.createElement('span');
+      st.className = 'st';
+      st.textContent = awayBy[r.name] ? 'away' : (readyBy[r.name] ? '✅ ready' : '…');
+      row.appendChild(dot); row.appendChild(nm); row.appendChild(k); row.appendChild(st);
+      finalEl.appendChild(row);
+    });
+
+    readyBtn.textContent = iAmReady ? 'Cancel' : 'Ready';
+    var live = 0;
+    for (var j = 0; j < roster.length; j++) if (roster[j] && !roster[j].away) live++;
+    roomSub.textContent = live < 2
+      ? 'A rematch needs two people in the room. Share the link.'
+      : 'kills / deaths — next round is a fresh arena and a clean slate.';
+  }
+
+  var countdownTimer = null;
+  function stopCountdown() {
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    countdownEl.textContent = '';
+  }
+  function runCountdown(endsAt) {
+    stopCountdown();
+    if (!endsAt) return;
+    var tick = function () {
+      var left = Math.max(0, endsAt - Date.now());
+      countdownEl.textContent = 'Next round in ' + Math.ceil(left / 1000) + '…';
+      if (left <= 0) stopCountdown();
+    };
+    tick();
+    countdownTimer = setInterval(tick, 200);
+  }
+
+  readyBtn.addEventListener('click', function () {
+    iAmReady = !iAmReady;
+    readyBtn.textContent = iAmReady ? 'Cancel' : 'Ready';
+    sendJson({ type: 'ready', ready: iAmReady });
+  });
+
+  // Arriving through an invite link skips the menu, so the name box there was
+  // never seen: the same edit has to be possible from inside the room.
+  roomNameEl.addEventListener('change', function () {
+    var n = (roomNameEl.value || 'you').slice(0, 12).trim() || 'you';
+    roomNameEl.value = n;
+    nameEl.value = n;
+    try { localStorage.setItem('sf_name', n); } catch (e) {}
+    sendJson({ type: 'setName', name: n });
+  });
+
+  function inviteLink(code, key) {
+    var base = window.location.origin + window.location.pathname;
+    return base + '?room=' + encodeURIComponent(code) + (key ? '&key=' + encodeURIComponent(key) : '');
+  }
+
+  inviteBtn.addEventListener('click', function () {
+    var url = inviteUrlEl.value;
+    function reveal() {
+      // Clipboard access is refused in plenty of mobile contexts, so always
+      // leave the link on screen to copy by hand.
+      inviteUrlEl.hidden = false;
+      inviteUrlEl.select && inviteUrlEl.select();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () {
+        inviteBtn.textContent = 'Link copied';
+        setTimeout(function () { inviteBtn.textContent = 'Copy invite link'; }, 1600);
+      }).catch(reveal);
+    } else reveal();
+  });
+
+  function connect(code, password, ping, key) {
     var name = (nameEl.value || 'you').slice(0, 12);
     try { localStorage.setItem('sf_name', name); } catch (e) {}
+    roomNameEl.value = name;
     note.textContent = 'Connecting to ' + code + '…';
+    roomCode = code;
+    lastPassword = password || '';
+    leaving = false;
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    if (key !== undefined) roomKey = key || '';
     var url = NET_URL.replace(/^http/, 'ws') + '/room/' + code + '/ws?name=' +
-              encodeURIComponent(name) + '&pw=' + encodeURIComponent(password || '');
+              encodeURIComponent(name) + '&pw=' + encodeURIComponent(password || '') +
+              (roomKey ? '&key=' + encodeURIComponent(roomKey) : '') +
+              // Offered on every connect. The server only honours it if it still
+              // holds the matching seat, so a stale one costs nothing.
+              (seatToken ? '&token=' + encodeURIComponent(seatToken) : '');
     ws = lagWrap(new WebSocket(url));
     ws.binaryType = 'arraybuffer';
     // Only a seed, so the strip has something to show before the first snapshot.
@@ -1334,15 +1531,27 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       bots = []; winner = null; myId = null;
       predWorld = null; predMe = null;
       mode = 'online';
+      retries = 0;                   // we are back; the next drop gets a full budget
+      note.textContent = '';
       showGame();
       last = 0; acc = 0;
     };
     ws.onmessage = lagDeliver(function (ev) {
       if (typeof ev.data === 'string') {
         var msg = JSON.parse(ev.data);
+        if (msg.type === 'hello') {
+          // Our seat, and the token that gets it back — score included — if this
+          // socket dies. Kept in memory only: a token is per-session, and one
+          // restored from storage in a new tab would fight the live tab over the
+          // same seat.
+          seatToken = msg.token || '';
+          return;
+        }
         if (msg.type === 'roster') {
           // Every room generates its own arena from a seed. Without rebuilding on
           // it we would draw different platforms than the ones being fought on.
+          // A new round is exactly this: a new seed arrives and the arena changes
+          // under everyone at the same moment.
           if (msg.seed != null && msg.seed !== mapSeed) {
             mapSeed = msg.seed;
             var keep = world ? world.players : {};
@@ -1353,6 +1562,30 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
           for (var i = 0; i < msg.slots.length; i++) roster[msg.slots[i].slot] = msg.slots[i];
           if (roster[msg.you]) myId = roster[msg.you].id;
           KILLS_TO_WIN = msg.killsToWin || KILLS_TO_WIN;
+
+          var wasPhase = phase;
+          phase = msg.phase || 'fighting';
+          finalTable = msg.final || null;
+          if (phase === 'over') {
+            // The server decides the round is over, so the client's own guess at
+            // a winner is no longer needed and would only disagree with it.
+            winner = null;
+            if (wasPhase !== 'over') iAmReady = false;
+            runCountdown(msg.countdownEndsAt || 0);
+          } else if (wasPhase === 'over') {
+            // A fresh round: clean slate locally too, or the predicted body keeps
+            // replaying inputs recorded against the arena that just went away.
+            iAmReady = false;
+            winner = null;
+            predWorld = null; predMe = null; predOff = null;
+            stopCountdown();
+          }
+          if (msg.room && msg.room.code) {
+            roomInvite = msg.room.invite || '';
+            inviteBtn.hidden = false;
+            inviteUrlEl.value = inviteLink(msg.room.code, roomInvite);
+          }
+          renderRoom();
         }
         return;
       }
@@ -1387,12 +1620,27 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
       measureRtt(me);
       if (me && !predMe) predStart();
       else if (me) predSync(me, false);
-      checkWin();
+      // Online, the room decides when a round is over and says so. Guessing from
+      // the snapshot as well would put a "wins" banner up a moment before or
+      // after the server agreed, and on a bad frame disagree about who.
     });
     ws.onclose = function () {
       if (mode !== 'online') return;
-      mode = 'menu'; showMenu(); ws = null;
-      note.textContent = 'Disconnected.';
+      ws = null;
+      // The seat is held for a grace period, so a dropped connection is worth
+      // trying to walk back into rather than dumping someone at the menu with
+      // their nine kills gone. Only with a token: without one there is nothing
+      // to come back to and the room would just hand out a fresh seat.
+      if (seatToken && !leaving && retries < 4) {
+        retries++;
+        note.textContent = 'Reconnecting…';
+        retryTimer = setTimeout(function () {
+          connect(roomCode, lastPassword, myPing);
+        }, 600 * retries);
+        return;
+      }
+      mode = 'menu'; showMenu();
+      note.textContent = leaving ? '' : 'Disconnected.';
     };
     ws.onerror = function () { note.textContent = 'Could not connect.'; };
   }
@@ -1517,5 +1765,18 @@ teaser: "Ragdoll stickmen on a map that is generated fresh for every room. Every
   window.addEventListener('resize', sizeCanvas);
   sizeCanvas();
   requestAnimationFrame(frame);
+
+  // Someone handed us a link: join that room directly, password skipped by the
+  // key it carries. The name box on the menu is never seen on this path, which
+  // is exactly why the room panel has one of its own.
+  (function joinFromLink() {
+    if (!NET_URL) return;
+    var q = String(window.location.search || '');
+    var code = (/[?&]room=([A-Z0-9]{4,8})/i.exec(q) || [])[1];
+    if (!code) return;
+    var key = (/[?&]key=([^&]+)/.exec(q) || [])[1] || '';
+    note.textContent = 'Joining ' + code.toUpperCase() + '…';
+    connect(code.toUpperCase(), '', 0, decodeURIComponent(key));
+  })();
 })();
 </script>

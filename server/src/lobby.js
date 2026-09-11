@@ -82,6 +82,7 @@ export class Lobby {
         body: JSON.stringify({
           name: body.name || 'room ' + code,
           password: body.password || '',
+          killsToWin: body.killsToWin | 0,
           colo
         })
       });

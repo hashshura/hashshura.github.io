@@ -19,6 +19,49 @@ Both import `../assets/js/stickfight-sim.js` and `../assets/js/stickfight-wire.j
 directly, so the server and the browser run byte-identical physics and speak the
 same wire format. Editing the sim changes both at once, which is the point.
 
+The room also imports `../assets/js/roomkit.js` — seats, invite keys, name
+rules, and the ready countdown, shared with Wordfall in `server-wordfall/`. It
+knows nothing about either game: no world, no tick, no word list. A seat there
+carries an `extra` bag the game fills in, which is how a score rides across a
+reconnect without roomkit ever knowing what a kill is.
+
+## Rounds
+
+A room is either `fighting` or `over`. Dropping into a fight is not gated —
+that is the character of the game — but reaching the kill target now really
+ends the round on the server, where it used to end only in each client's
+drawing while the server fought on forever. `over` shows the final table and
+arms the ready gate; when everyone still connected has readied, a countdown
+runs and a fresh arena starts with the scores wiped.
+
+The target defaults to 10 and can be set per room at creation
+(`killsToWin` on `/lobby/create`), which is also what makes the round
+transition testable in under a minute.
+
+## Reconnecting
+
+Every player gets a seat token in the `hello` message. If the socket dies, the
+seat — name, slot, and score — is held for 25 seconds; reconnecting with
+`?token=` walks back into it. So a disconnect at nine kills is a return at nine
+kills. Without a token you get a fresh seat, which is also what pressing "menu"
+deliberately does.
+
+## Tests
+
+```sh
+npm test            # offline: roomkit, the wire, and the client under a stub DOM
+npx wrangler dev --port 8799 --local
+SF_BASE=http://127.0.0.1:8799 npm run test:live
+```
+
+`test:live` runs `roomtest.mjs` (seats, names, invites, tokens — fast and
+deterministic) and `roundtest.mjs` (the round lifecycle — slow, and it drives a
+real fight). The reconnect half of `roundtest` banks a **death** rather than a
+kill precisely because a death can be produced on demand by walking off the
+edge. The round-end half still needs one ragdoll to actually beat another, and
+perhaps one run in three they decline; it says so plainly rather than failing
+quietly. Re-run before believing it.
+
 ## Deploy
 
 ```sh
