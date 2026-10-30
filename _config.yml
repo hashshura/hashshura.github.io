@@ -4,7 +4,7 @@ permalink:           /:title
 title:               'Catatan Ashura'
 tagline:             'Asif Hummam Rais kalau disingkat jadi apa?'
 description:         'Blog pribadi Asif, seorang <i>programmer</i> yang hidup biasa-biasa saja dan senang berperilaku kekanak-kanakan.'
-url:                 https://hashshura.github.io
+url:                 https://ashura.id
 baseurl:             ''
 paginate:            5
 
