@@ -11,9 +11,9 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
    around in, but never so tall that the pad falls off the bottom of a phone. */
 #pb-stage{position:relative;left:50%;transform:translateX(-50%);width:calc(100vw - 8px);max-width:880px;margin:0 0 6px;}
 @supports (height: 100dvh) {
-  #pb-stage{width:min(calc(100vw - 8px), max(320px, calc((100dvh - 250px) * 1.6)), 880px);}
+  #pb-stage{width:min(calc(100vw - 8px), max(320px, calc((100dvh - 230px) * 1.25)), 880px);}
 }
-#pb-canvas{display:block;width:100%;height:auto;aspect-ratio:16/10;background:#fbfbf7;border:2px solid #222;border-radius:8px;
+#pb-canvas{display:block;width:100%;height:auto;aspect-ratio:64/51;background:#fbfbf7;border:2px solid #222;border-radius:8px;
   touch-action:pan-y;user-select:none;-webkit-user-select:none;}
 
 #pb-controls{display:flex;justify-content:center;margin:10px 0 4px;touch-action:none;user-select:none;-webkit-user-select:none;}
@@ -61,7 +61,7 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
 </style>
 
 <div id="pb-stage">
-  <canvas id="pb-canvas" width="640" height="400"></canvas>
+  <canvas id="pb-canvas" width="640" height="510"></canvas>
   <div id="pb-controls">
     <div id="pb-pad">
       <button type="button" class="pb-btn up" data-k="u" tabindex="-1">▲</button>
@@ -96,7 +96,8 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
 
 <script>
 (function(){
-  var W = 640, H = 400;
+  // the play area is 640x400; the poem gets a band of its own above and below
+  var W = 640, H = 400, TOP = 46, BOT = 64, CH = TOP + H + BOT;
   var INK = '#222', PAPER = '#fbfbf7', HAIR = '#6b4430', HAIR_D = '#3d2619';
   var SAND = '#f6efde', SEA = '#cfe5ea', SEA_D = '#7fb0bf', LEAF = '#d4e3bc';
   var WOOD = '#c9a57a', WOOD_L = '#e2cda9', WOOD_D = '#a9845a', BAMBOO = '#eadfc4', MAT = '#e7a1c0';
@@ -235,7 +236,7 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
   }
 
   // ---- the player, and the level-scoped state ----
-  var P, S, mode = 'intro', introT = 0, clearT = 0, cardA = 1, l2A = 0;
+  var P, S, mode = 'play', clearT = 0, l1A = 0, l2A = 0;
   function newPlayer(x, y){
     return { x:x, y:y, vx:0, vy:0, face:1, step:0, mode:'walk', stun:0,
              h:0, s:0, lastSteer:0, carve:0, flipT:99, pumpFx:0 };
@@ -366,15 +367,9 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
     return lines;
   }
   // A nudge for someone who has been stuck a good while, never a tutorial.
-  function hint(str){
-    var px = U(13), bh = px + 11;
-    ctx.font = px + 'px ' + UI_FONT;
-    var w = Math.min(W - 12, ctx.measureText(str).width + 26), ga = ctx.globalAlpha;
-    ctx.globalAlpha = ga*0.9; ctx.fillStyle = PAPER;
-    ctx.beginPath(); ctx.rect(W/2 - w/2, H - 10 - bh, w, bh); ctx.fill();
-    ctx.globalAlpha = ga;
-    text(str, W/2, H - 10 - bh/2, px, '#666', {max: W - 16});
-  }
+  // Levels only ask for one; it is drawn in the band under the play area.
+  var hintMsg = '';
+  function hint(str){ hintMsg = str; }
 
   // ---- the beach ----
   function drawSand(){
@@ -415,11 +410,12 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
     }
     pen(INK, 1.2); circ(tx - 2, ty + 3, 2.4, '#8a6a3d'); circ(tx + 2.5, ty + 4, 2.4, '#8a6a3d');
   }
-  function drawSurfboard(x, y, col){
-    pen(INK, 1.8);
-    ctx.beginPath(); ctx.ellipse(x, y - 21, 6, 22, 0, 0, TAU); ctx.fillStyle = col; ctx.fill(); ctx.stroke();
-    pen(INK, 1); ln(x, y - 40, x, y - 3);
-    ell(x, y + 1, 9, 2, 'rgba(0,0,0,0.08)');
+  // lying flat on the sand, so it is ground you walk over, not a wall
+  function drawSurfboard(x, y, col, tilt){
+    ell(x + 1, y + 2, 23, 6, 'rgba(0,0,0,0.06)');
+    ctx.beginPath(); ctx.ellipse(x, y, 23, 5.5, tilt || 0, 0, TAU);
+    ctx.fillStyle = col; ctx.fill(); pen(INK, 1.6); ctx.stroke();
+    pen(INK, 0.9); ln(x - 19*Math.cos(tilt || 0), y - 19*Math.sin(tilt || 0), x + 19*Math.cos(tilt || 0), y + 19*Math.sin(tilt || 0));
   }
   function drawRock(x, y, r){
     pen(INK, 1.6); ctx.beginPath(); ctx.ellipse(x, y - r*0.35, r, r*0.6, 0, Math.PI, TAU); ctx.closePath();
@@ -465,8 +461,11 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
     pen(INK, 1.4); ctx.beginPath(); ctx.moveTo(bx + 56, by - 18); ctx.lineTo(bx + 76, by - 18); ctx.lineTo(bx + 79, by - 10); ctx.lineTo(bx + 58, by - 10); ctx.closePath();
     ctx.fillStyle = MAT; ctx.fill(); ctx.stroke();
   }
+  // Solid over its whole footprint, so you bump into it rather than walking
+  // in behind the blind. Drawn at VBACK, i.e. behind anyone standing at it.
+  var VBACK = 60;
   function verandaSolids(bx, by){
-    return [{x:bx - 92, y:by - 50, w:184, h:36}, {x:bx - 80, y:by - 6, r:5}, {x:bx + 80, y:by - 6, r:5}, {x:bx - 16, y:by - 4, r:9}];
+    return [{x:bx - 92, y:by - 138, w:184, h:124}, {x:bx - 80, y:by - 6, r:5}, {x:bx + 80, y:by - 6, r:5}, {x:bx - 16, y:by - 4, r:9}];
   }
 
   // ---- people ----
@@ -643,11 +642,10 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
   function beach(){
     S.bx = 474; S.by = 176; S.gx = S.bx - 16;
     S.palms = [[104,150,62,8],[226,96,54,-7],[606,150,60,-9],[48,262,52,6],[320,300,50,5],[572,318,56,-6]];
-    S.surf = [[176,318,'#8fd0e0'],[196,322,'#f3d36b']];
+    S.surf = [[168,322,'#8fd0e0',-0.12],[214,336,'#f3d36b',0.18]];
     S.rocks = [[452,334,10],[488,342,7],[640 - 120,250,8]];
     S.solids = verandaSolids(S.bx, S.by);
     S.palms.forEach(function(p){ S.solids.push({x:p[0], y:p[1], r:6}); });
-    S.surf.forEach(function(p){ S.solids.push({x:p[0], y:p[1], r:6}); });
     S.rocks.forEach(function(p){ S.solids.push({x:p[0], y:p[1] - 2, r:p[2]}); });
     S.boards = [{k:'t', x:S.bx - 42, y:S.by + 22, f:-1}, {k:'r', x:S.bx + 40, y:S.by + 24, f:1}];
     S.seat = {x:S.bx + 18, y:S.by - SEAT};
@@ -655,11 +653,11 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
   }
   function beachDraw(girlFn, boardAlpha){
     drawSand(); drawSea(SHORE);
+    S.surf.forEach(function(p){ drawSurfboard(p[0], p[1], p[2], p[3]); });
     var list = [];
     S.palms.forEach(function(p){ list.push({y:p[1], f:function(){ drawPalm(p[0], p[1], p[2], p[3]); }}); });
-    S.surf.forEach(function(p){ list.push({y:p[1], f:function(){ drawSurfboard(p[0], p[1], p[2]); }}); });
     S.rocks.forEach(function(p){ list.push({y:p[1], f:function(){ drawRock(p[0], p[1], p[2]); }}); });
-    list.push({y:S.by, f:function(){
+    list.push({y:S.by - VBACK, f:function(){
       drawVeranda(S.bx, S.by); girlFn();
       if (P.mode === 'sit') me(S.seat.x, S.seat.y, 1, 0, 'sit', false, S.by - 6);
     }});
@@ -713,47 +711,59 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
   // 2 — the portrait: pennies laid along her outline, picked up in order,
   // each one drawing the next bit of line. Legs, then hair, then clothes.
   function portrait(){
-    function circlePts(cx, cy, r, a0, a1, n){ var o=[]; for (var i=0;i<=n;i++){ var a = a0 + (a1-a0)*i/n; o.push([cx+Math.cos(a)*r, cy+Math.sin(a)*r]); } return o; }
-    var legL = [[246,374],[292,262]], legR = [[348,262],[394,374]];
-    var head = circlePts(320, 108, 29, Math.PI/2, Math.PI/2 + TAU, 24);
-    // one long wavy fall of hair: up the left side, over the crown, down the right
-    var hair = [], i;
-    for (i=0;i<=10;i++) hair.push([279 + i*0.5, 232 - i*12.4]);
-    hair = hair.concat(circlePts(320, 108, 37, Math.PI*1.08, Math.PI*1.92 + 0.0001, 14));
-    for (i=0;i<=10;i++) hair.push([356 - 0.5 + i*0.5 + 0.5, 108 - 4 + i*12.4]);
-    var shirt = [[306,146],[280,157],[268,192],[286,197],[291,262],[349,262],[354,197],[372,192],[360,157],[334,146],[320,157],[306,146]];
-    var strokes = [ {pts:legL, col:INK, gap:24}, {pts:legR, col:INK, gap:24}, {pts:head, col:INK, gap:17},
-                    {pts:hair, col:HAIR, wavy:true, gap:17}, {pts:shirt, col:INK, gap:24, sharp:true} ];
-    var coins = [];
-    strokes.forEach(function(st, si){
-      var pts = st.pts, spacing = st.gap, out = [pts[0]], need = spacing, k;
-      // a sharp stroke keeps a penny on every corner, so the line can turn there
-      if (st.sharp) for (k=1;k<pts.length;k++){
-        var n = Math.max(1, Math.round(Math.hypot(pts[k][0]-pts[k-1][0], pts[k][1]-pts[k-1][1]) / spacing));
-        for (var j=1;j<=n;j++) out.push([pts[k-1][0] + (pts[k][0]-pts[k-1][0])*j/n, pts[k-1][1] + (pts[k][1]-pts[k-1][1])*j/n]);
-      }
-      else for (k=1;k<pts.length;k++){
+    // resample a polyline to points `step` apart, so outlines can be any shape
+    function dense(pts, step){
+      var out = [pts[0]], need = step;
+      for (var k=1;k<pts.length;k++){
         var ax = pts[k-1][0], ay = pts[k-1][1], bx = pts[k][0], by = pts[k][1], seg = Math.hypot(bx-ax, by-ay), pos = 0;
-        while (seg - pos >= need){ pos += need; var t = pos/seg; out.push([ax + (bx-ax)*t, ay + (by-ay)*t]); need = spacing; }
+        while (seg - pos >= need){ pos += need; var t = pos/seg; out.push([ax + (bx-ax)*t, ay + (by-ay)*t]); need = step; }
         need -= (seg - pos);
       }
-      if (!st.sharp && Math.hypot(out[out.length-1][0]-pts[pts.length-1][0], out[out.length-1][1]-pts[pts.length-1][1]) > spacing*0.45) out.push(pts[pts.length-1]);
-      out.forEach(function(p, k){
-        var x = p[0], y = p[1];
-        if (st.wavy){
-          // swing alternate pennies gently out and in: the line between them waves
-          var side = (k % 2) ? 1 : -1, dx = x - 320, dy = y - 108, d = Math.hypot(dx, dy) || 1;
-          if (y > 140) x += side*3.5; else { x += dx/d*side*3.5; y += dy/d*side*3.5; }
-        }
-        coins.push({x:x, y:y, s:si, got:false});
-      });
+      out.push(pts[pts.length-1]);
+      return out;
+    }
+    function arcPts(cx, cy, r, a0, a1, n){ var o=[]; for (var i=0;i<=n;i++){ var a = a0 + (a1-a0)*i/n; o.push([cx+Math.cos(a)*r, cy+Math.sin(a)*r]); } return o; }
+    function quad(a, c, b, n){ var o=[]; for (var i=0;i<=n;i++){ var t=i/n, u=1-t; o.push([u*u*a[0]+2*u*t*c[0]+t*t*b[0], u*u*a[1]+2*u*t*c[1]+t*t*b[1]]); } return o; }
+    // legs stretched out, with a little bend at the knee
+    var legL = quad([246,374], [278,322], [292,262], 20), legR = quad([348,262], [362,322], [394,374], 20);
+    var head = arcPts(320, 108, 29, Math.PI/2, Math.PI/2 + TAU, 48);
+    // hair: down the left side, over the crown, down the right; then waved
+    var base = [], i;
+    for (i=0;i<=10;i++) base.push([279 + i*0.5, 232 - i*12.4]);
+    base = base.concat(arcPts(320, 108, 37, Math.PI*1.08, Math.PI*1.92, 28));
+    for (i=0;i<=10;i++) base.push([356 + i*0.5, 104 + i*12.4]);
+    base = dense(base, 2);
+    var hair = [], run = 0;
+    for (i=0;i<base.length;i++){
+      var a = base[Math.max(0, i-1)], b = base[Math.min(base.length-1, i+1)];
+      var nx = -(b[1]-a[1]), ny = b[0]-a[0], nl = Math.hypot(nx, ny) || 1;
+      if (i) run += Math.hypot(base[i][0]-base[i-1][0], base[i][1]-base[i-1][1]);
+      var off = Math.sin(run*TAU/38)*3;
+      hair.push([base[i][0] + nx/nl*off, base[i][1] + ny/nl*off]);
+    }
+    // a plain tee: short sleeves, soft shoulders, a scooped neck
+    var shirt = [[306,146]].concat(quad([306,146],[284,149],[278,158],6).slice(1))
+      .concat([[268,192],[286,197]]).concat(quad([286,197],[289,230],[291,262],6).slice(1))
+      .concat(quad([291,262],[320,266],[349,262],6).slice(1)).concat(quad([349,262],[351,230],[354,197],6).slice(1))
+      .concat([[372,192],[362,158]]).concat(quad([362,158],[356,149],[334,146],6).slice(1))
+      .concat(quad([334,146],[320,164],[306,146],8).slice(1));
+    var strokes = [
+      {pts:dense(legL, 3), col:INK, n:2}, {pts:dense(legR, 3), col:INK, n:2},
+      {pts:dense(head, 3), col:INK, n:5}, {pts:hair, col:HAIR, n:7}, {pts:dense(shirt, 3), col:INK, n:8}
+    ];
+    var coins = [];
+    strokes.forEach(function(st, si){
+      for (var k=0;k<st.n;k++){
+        var idx = Math.round(k*(st.pts.length - 1)/(st.n - 1));
+        coins.push({x:st.pts[idx][0], y:st.pts[idx][1], s:si, idx:idx, got:false});
+      }
     });
     S.strokes = strokes; S.coins = coins;
   }
   LV.push({
     init: function(){ portrait(); S.next = 0; S.parts = []; S.lit = 0; P = newPlayer(70, 372); },
     update: function(D, live){
-      walk(D); bounds(P, 10, 50, W-10, H-6);
+      walk(D, 1.4); bounds(P, 10, 50, W-10, H-6);   // a brisker walk: the outline is long
       if (live){
         var c = S.coins[S.next];
         if (c && dist(P.x, P.y - 8, c.x, c.y) < 15){
@@ -766,30 +776,17 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
     },
     draw: function(){
       drawSand();
-      // the drawn line, stroke by stroke, through the pennies already taken,
-      // eased through their midpoints so a ring of pennies reads as a round head
-      var i, run = [];
-      function flush(){
-        if (run.length > 1){
-          var st = S.strokes[run[0].s];
-          pen(st.col, (st.wavy ? 2.8 : 2.6) + S.lit*0.8);
-          ctx.beginPath(); ctx.moveTo(run[0].x, run[0].y);
-          for (var k=1;k<run.length-1;k++){
-            if (st.sharp) ctx.lineTo(run[k].x, run[k].y);
-            else ctx.quadraticCurveTo(run[k].x, run[k].y, (run[k].x + run[k+1].x)/2, (run[k].y + run[k+1].y)/2);
-          }
-          ctx.lineTo(run[run.length-1].x, run[run.length-1].y);
-          ctx.stroke();
-        }
-        run = [];
+      // each penny taken uncovers her outline up to where it lay
+      var i, upTo = [];
+      for (i=0;i<S.coins.length;i++){ var cc = S.coins[i]; if (cc.got) upTo[cc.s] = cc.idx; }
+      for (var si=0; si<S.strokes.length; si++){
+        if (!upTo[si]) continue;
+        var st = S.strokes[si];
+        pen(st.col, 2.6 + S.lit*0.8);
+        ctx.beginPath(); ctx.moveTo(st.pts[0][0], st.pts[0][1]);
+        for (var k=1;k<=upTo[si];k++) ctx.lineTo(st.pts[k][0], st.pts[k][1]);
+        ctx.stroke();
       }
-      for (i=0;i<S.coins.length;i++){
-        var cc = S.coins[i];
-        if (!cc.got){ flush(); break; }
-        if (run.length && run[0].s !== cc.s) flush();
-        run.push(cc);
-      }
-      flush();
       for (i=0;i<S.coins.length;i++){
         var c = S.coins[i];
         if (c.got) continue;
@@ -923,7 +920,7 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
       });
 
       var list = [];
-      list.push({y:S.by, f:function(){ drawVeranda(S.bx, S.by); girlSit(S.gx, S.by - SEAT, S.by - 6, clamp((P.x - S.gx)/120, -1, 1)); }});
+      list.push({y:S.by - VBACK, f:function(){ drawVeranda(S.bx, S.by); girlSit(S.gx, S.by - SEAT, S.by - 6, clamp((P.x - S.gx)/120, -1, 1)); }});
       S.boards.forEach(function(b){
         if (b.state === 'ridden') return;
         list.push({y:b.y, f:function(){
@@ -1026,7 +1023,7 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
       drawSand(); drawSea(SHORE + 8);
       var list = [];
       S.palms.forEach(function(p){ list.push({y:p[1], f:function(){ drawPalm(p[0], p[1], p[2], p[3]); }}); });
-      list.push({y:S.by, f:function(){ drawVeranda(S.bx, S.by); girlSit(S.gx, S.by - SEAT, S.by - 6, clamp((P.x - S.gx)/120, -1, 1)); }});
+      list.push({y:S.by - VBACK, f:function(){ drawVeranda(S.bx, S.by); girlSit(S.gx, S.by - SEAT, S.by - 6, clamp((P.x - S.gx)/120, -1, 1)); }});
       list.push({y:P.y, f:meWalking});
       drawSorted(list);
       // the little trail of dots from her head to her thoughts
@@ -1083,18 +1080,23 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
     },
     draw: function(){
       drawSand();
-      // sandy paths away from the veranda, off every edge
-      pen('#ddd2b6', 1.6);
-      ctx.setLineDash([6, 7]);
-      ln(0, S.by + 14, S.bx - 96, S.by + 14); ln(0, S.by + 46, S.bx - 96, S.by + 46);
-      ln(S.bx + 96, S.by + 14, W, S.by + 14); ln(S.bx + 96, S.by + 46, W, S.by + 46);
-      ln(S.bx - 18, S.by + 50, S.bx - 18, H); ln(S.bx + 18, S.by + 50, S.bx + 18, H);
-      ln(S.bx - 18, S.by - 140, S.bx - 18, 0); ln(S.bx + 18, S.by - 140, S.bx + 18, 0);
+      // trodden paths away from the veranda, off every edge: a shade darker
+      // than the sand, edged with footprint dashes
+      ctx.fillStyle = '#ede1c3';
+      ctx.fillRect(0, S.by + 14, W, 32);
+      ctx.fillRect(S.bx - 18, S.by + 14, 36, H - S.by - 14);
+      ctx.fillRect(S.bx - 18, 0, 36, S.by - 138);
+      pen('#cdbd96', 1.4);
+      ctx.setLineDash([5, 6]);
+      ln(0, S.by + 14, S.bx - 18, S.by + 14); ln(S.bx + 18, S.by + 14, W, S.by + 14);
+      ln(0, S.by + 46, S.bx - 18, S.by + 46); ln(S.bx + 18, S.by + 46, W, S.by + 46);
+      ln(S.bx - 18, S.by + 46, S.bx - 18, H); ln(S.bx + 18, S.by + 46, S.bx + 18, H);
+      ln(S.bx - 18, S.by - 138, S.bx - 18, 0); ln(S.bx + 18, S.by - 138, S.bx + 18, 0);
       ctx.setLineDash([]);
       var list = [];
       S.palms.forEach(function(p){ list.push({y:p[1], f:function(){ drawPalm(p[0], p[1], p[2], p[3]); }}); });
       var look = S.glance > 0 ? clamp((P.x - S.gx)/80, -1, 1) : 0.6;
-      list.push({y:S.by, f:function(){
+      list.push({y:S.by - VBACK, f:function(){
         drawVeranda(S.bx, S.by); girlSit(S.gx, S.by - SEAT, S.by - 6, look);
         if (P.mode === 'sit') me(S.seat.x, S.seat.y, 1, 0, 'sit', false, S.by - 6);
       }});
@@ -1384,40 +1386,33 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
     }
   });
 
-  // ---- the poem, inside the game ----
-  // A level opens on its first line in the middle of the box; once you move it
-  // steps up to a caption. When the level is done, both lines come back to the
-  // middle, the second arriving a moment after the first.
+  // ---- the poem, in its own bands above and below the play area ----
+  // The first line is there from the start of a level, up top. The second
+  // line arrives underneath once the level is done.
   function drawPoem(){
-    var p = POEM[cur], i, px, lh, lines;
-    if (cardA < 0.97){
-      px = U(14); lh = px*1.3;
-      ctx.font = font(px, {italic:true, serif:true});
-      lines = wrapText(p[0], W*0.56);
-      var w = 0; for (i=0;i<lines.length;i++) w = Math.max(w, ctx.measureText(lines[i]).width);
-      ctx.globalAlpha = (1 - cardA)*0.82; ctx.fillStyle = PAPER;
-      ctx.fillRect(W/2 - w/2 - 10, 9, w + 20, lines.length*lh + 8);
-      ctx.globalAlpha = 1 - cardA;
-      for (i=0;i<lines.length;i++) text(lines[i], W/2, 13 + lh/2 + i*lh, px, '#444', {italic:true, serif:true, max:W});
+    var p = POEM[cur], px = U(17);
+    pen('#e2ded2', 1); ln(0, TOP - 0.5, W, TOP - 0.5); ln(0, TOP + H + 0.5, W, TOP + H + 0.5);
+    ctx.globalAlpha = l1A;
+    text(p[0], W/2, TOP/2 + 1, px, INK, {italic:true, serif:true, max:W*0.86});
+    ctx.globalAlpha = 1;
+    var by = TOP + H + 25;
+    if (l2A > 0){
+      ctx.globalAlpha = l2A;
+      text(p[1], W/2, by, px, INK, {italic:true, serif:true, max:W*0.92});
       ctx.globalAlpha = 1;
+    } else if (mode === 'play' && hintMsg){
+      text(hintMsg, W/2, by, U(13), '#888', {max:W*0.92});
     }
-    if (cardA > 0.01){
-      ctx.globalAlpha = cardA*0.84; ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
-      px = U(23); lh = px*1.4;
-      ctx.font = font(px, {italic:true, serif:true});
-      var l1 = wrapText(p[0], W*0.84), l2 = wrapText(p[1], W*0.84);
-      var total = (l1.length + l2.length)*lh + lh*0.3, y0 = H/2 - total/2 + lh/2;
-      ctx.globalAlpha = cardA;
-      for (i=0;i<l1.length;i++) text(l1[i], W/2, y0 + i*lh, px, INK, {italic:true, serif:true, max:W});
-      ctx.globalAlpha = cardA*l2A;
-      for (i=0;i<l2.length;i++) text(l2[i], W/2, y0 + (l1.length + i)*lh + lh*0.3, px, INK, {italic:true, serif:true, max:W});
+    if (mode === 'wait'){
+      ctx.globalAlpha = 0.45 + 0.45*Math.abs(Math.sin(S.t*0.05));
+      text(cur < N-1 ? '→ press a direction to go on' : 'the end · press a direction to start over', W/2, CH - 13, U(11), '#888');
       ctx.globalAlpha = 1;
     }
   }
 
   // ---- the frame of it all: load, tick, finish, move on ----
   function load(i){
-    cur = i; mode = 'intro'; introT = 0; clearT = 0; l2A = 0;
+    cur = i; mode = 'play'; clearT = 0; l1A = 0; l2A = 0;
     S = {t:0, pt:0, done:false};
     LV[i].init();
     syncPoem();
@@ -1432,42 +1427,37 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
   function tick(){
     readInput();
     S.t++;
-    if (mode === 'intro'){
-      // the opening line holds the screen for a moment; a press moves it along
-      if (++introT > 170 || (introT > 25 && fresh)) mode = 'play';
-    } else {
-      var live = mode === 'play';
-      if (live) S.pt++;
-      LV[cur].update(live ? dir : ZERO, live);
-    }
+    l1A = Math.min(1, l1A + 1/40);
+    var live = mode === 'play';
+    if (live) S.pt++;
+    LV[cur].update(live ? dir : ZERO, live);
     if (mode === 'clear'){
       clearT++;
-      if (clearT > 95) l2A = Math.min(1, l2A + 1/50);
-      if (clearT > 200) mode = 'wait';
+      if (clearT > 40) l2A = Math.min(1, l2A + 1/50);
+      if (clearT > 150) mode = 'wait';
     } else if (mode === 'wait' && fresh) load(cur < N-1 ? cur + 1 : 0);
-    var target = (mode === 'intro' || mode === 'wait' || (mode === 'clear' && clearT > 60)) ? 1 : 0;
-    cardA += (target - cardA)*0.09;
   }
 
   var scale = 1;
   function size(){
     var cssW = cv.clientWidth || (cv.parentElement && cv.parentElement.clientWidth) || W;
     var dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssW*dpr*H/W);
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssW*dpr*CH/W);
     scale = cv.width / W;
     ui = Math.max(1, 0.92*W/cssW);
   }
   function draw(){
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, CH);
+    // the play area, shifted under the top band and kept out of both bands
+    ctx.save();
+    ctx.translate(0, TOP);
+    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+    hintMsg = '';
     LV[cur].draw();
+    text((cur + 1) + ' / ' + N, W - 14, 24, U(12), cur === 6 ? '#ddd' : '#aaa', {align:'right'});
+    ctx.restore();
     drawPoem();
-    text((cur + 1) + ' / ' + N, W - 14, 24, U(12), cur === 6 && cardA < 0.5 ? '#ddd' : '#aaa', {align:'right'});
-    if (mode === 'wait'){
-      ctx.globalAlpha = 0.5 + 0.5*Math.abs(Math.sin(S.t*0.05));
-      hint(cur < N-1 ? '→ press a direction to go on' : 'the end · press a direction to start over');
-      ctx.globalAlpha = 1;
-    }
   }
 
   var last = 0, acc = 0, STEP = 1000/60;
