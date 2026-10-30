@@ -3,7 +3,7 @@ layout: post
 title: Little Kitten
 comments: true
 thumbnail: /assets/img/2026-08-05-little-kitten.png
-teaser: "Saya suka kucing dan tidak pernah berhasil memelihara satu pun — pernah hampir membunuh satu pakai segelas susu sapi. Ceritanya cuma muncul kalau kamu mau menyuapi kucing di atas dulu."
+teaser: "Saya suka kucing tapi belum pernah berhasil memelihara satu pun. Waktu SD malah hampir bikin satu mati gara-gara susu sapi. Tulisannya baru muncul kalau kamu kasih makan kucing di atas dulu."
 ---
 
 <style>
@@ -50,47 +50,43 @@ teaser: "Saya suka kucing dan tidak pernah berhasil memelihara satu pun — pern
 
 <div id="ink" markdown="1">
 
-_Saya suka kucing. Saya belum pernah berhasil memelihara satu pun. Dua kalimat itu tinggal bertahun-tahun di kepala saya tanpa pernah saling menyapa._
+_Saya suka kucing, tapi belum pernah berhasil memelihara satu pun._
 
 ___
 
 ### Susu sapi
 
-SD. Satu anak kucing, satu anak manusia, dan niat baik tanpa ilmu.
+Waktu SD, saya pernah punya anak kucing. Saya kasih dia susu sapi, susu kotak yang biasa saya minum sendiri. Buat anak sembilan tahun, logikanya masuk akal: kucing kan suka susu.
 
-Saya kasih dia susu sapi—susu kotak yang saya sendiri minum. Logikanya masuk akal untuk anak sembilan tahun: kucing suka susu.
+Belasan tahun kemudian saya baru tahu kalau kebanyakan kucing tidak bisa mencerna laktosa.
 
-Kucing dewasa tidak bisa mencerna laktosa. Saya baru tahu itu belasan tahun kemudian.
-
-Diare. Lalu kalimat yang menutup perkara:
+Kucingnya diare. Lalu keluar kalimat ini:
 
 > _"Kayaknya kamu belum bisa pelihara kucing."_
 
-Keluarga saya tidak salah. Kucing itu diberikan ke orang lain, dan saya dapat pelajaran pertama tentang mencintai sesuatu: niat baik yang tidak diverifikasi tetap racun. Manis di tangan yang memberi, racun di perut yang menerima.
+Keluarga saya tidak salah. Kucingnya akhirnya diberikan ke orang lain. Dari situ saya belajar kalau niat baik saja tidak cukup kalau tidak tahu caranya.
 
-Susu kotak di game di atas bukan metafora yang saya karang. Itu barang bukti. Saya pernah jadi pemain yang mengkliknya, dan waktu itu tidak ada tap-untuk-lanjut.
+Susu kotak di game di atas itu bukan karangan. Itu beneran pernah terjadi. Bedanya, dulu tidak ada tombol untuk mengulang.
 
 ### Satu ibu, empat anak
 
-Belasan tahun kemudian. Kuliah, bab terakhir, periode ketika seseorang bisa duduk delapan jam di depan laptop, menghasilkan nol paragraf, dan tetap merasa habis.
+Lompat ke zaman kuliah, semester akhir. Masa-masa duduk di depan laptop delapan jam, tidak menulis satu paragraf pun, tapi tetap capek.
 
-Di depan rumah tinggal kucing liar: satu ibu, empat anak. Mereka tidak tahu apa itu tugas akhir, dan itu bagian terbaiknya. Mereka datang setiap hari, minta dielus, tidur di atas sandal, memperlakukan saya sebagai furnitur hangat yang bisa bergerak.
+Di depan rumah ada kucing liar, satu induk dan empat anak. Setiap hari mereka datang, minta dielus, lalu tidur di atas sandal. Saya lebih sering menemani mereka daripada membuka file skripsi. _No regrets, though._
 
-Saya lebih rajin menemui mereka daripada membuka dokumen skripsi. Prioritas itu tidak pernah saya sesali.
+Lalu suatu hari mereka naik ke plafon. Tengah malam, empat anak kucing lari-larian di atas kepala orang serumah. Tetangga sepertinya tidak terlalu menikmati.
 
-Lalu mereka naik ke plafon. Tengah malam, empat kucing kecil menggelar pertunjukan di atas kepala seisi rumah—gratis, tanpa diminta. Tetangga punya pendapat lain soal seni.
-
-Saya tidak pernah jadi pemilik mereka. Selama beberapa bulan saya cuma orang yang mereka datangi. Ternyata itu bentuk hubungan yang lebih jujur: tidak ada yang dimiliki, tidak ada yang dijanjikan, dan mereka tetap datang.
+Mereka bukan kucing saya. Selama beberapa bulan itu, saya cuma orang yang mereka datangi. Ternyata itu sudah cukup.
 
 ### Yang tidak dicatat siapa pun
 
-Kucing tidak punya rencana lima tahun. Tidak menabung. Tidak peduli IPK, tidak peduli promosi, dan tidak akan datang ke pemakaman saya. Mereka makan, tidur, jatuh dari tempat tinggi dengan gaya, lalu mengulanginya besok tanpa rasa malu.
+Kucing tidak punya rencana lima tahun. Tidak menabung, tidak peduli IPK. Makan, tidur, lompat dari tempat tinggi, besoknya diulang lagi.
 
-Tidak ada yang mencatat apa pun. Susu sapi itu tidak bisa saya tarik kembali. Kucing-kucing di plafon itu tidak mengingat nama saya, dan tidak perlu.
+Susu sapi itu tidak bisa saya tarik kembali. Kucing-kucing di plafon juga pasti sudah lupa sama saya, dan tidak apa-apa.
 
-Justru karena itu urusannya jadi sederhana: kasih makan yang lapar hari ini. Bukan untuk pahala, bukan untuk cerita. Sepuluh menit dielus, bagi seekor kucing kecil, sudah seluruh dunia—dan dunia itu tidak butuh dicatat siapa pun untuk jadi nyata.
+Yang bisa saya lakukan sekarang cuma memberi makan kucing yang lapar hari ini. Buat seekor anak kucing, dielus sepuluh menit itu sudah banyak.
 
-Terima kasih sudah menyuapinya sampai kenyang. Kalau hari ini kamu ketemu kucing liar: jangan kasih susu sapi. Kasih air. Kasih waktu. Asif, _signing off._ 🐾
+Makasih sudah menyuapinya sampai kenyang. Kalau hari ini ketemu kucing liar, jangan kasih susu sapi, ya. Kasih air saja. Asif, _signing off._ 🐾
 
 </div>
 

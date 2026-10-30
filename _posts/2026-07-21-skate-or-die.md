@@ -3,7 +3,7 @@ layout: post
 title: I'm a Fucking Adult Yet I Am Learning How to Skate
 comments: true
 thumbnail: /assets/img/2026-07-21-skate-or-die.png
-teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya sudah mau menikah. Ceritanya ditulis pakai tinta tak terlihat — cuma muncul kalau kamu ikut meluncur dan tidak nabrak."
+teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya sudah mau menikah. Tulisannya baru muncul kalau kamu ikut meluncur dan tidak nabrak."
 ---
 
 <style>
@@ -50,45 +50,45 @@ teaser: "Umur 26 saya baru belajar berdiri di atas papan, sementara adik saya su
 
 <div id="ink" markdown="1">
 
-_Umur 26, dan saya baru belajar berdiri di atas papan. Ceritanya ditulis pakai tinta tak terlihat—ia muncul kalau kamu ikut meluncur._
+_Umur 26, dan saya baru belajar skate. Tulisan di bawah ini baru muncul kalau kamu ikut meluncur di atas._
 
 ___
 
 ### Mei 2026
 
-Saya beli longboard. Sebulan kemudian, saya dapat surfskate gratis. Tidak ada pencerahan, tidak ada film inspiratif sebelumnya. Saya memutuskan ingin bisa, lalu mulai.
+Bulan Mei saya beli longboard. Sebulan kemudian, saya dapat surfskate gratis. Tidak ada momen pencerahan atau habis nonton film apa pun. Saya cuma ingin bisa, jadi ya mulai saja.
 
-Aspal mengajar tanpa kurikulum. Ia tidak peduli jabatanmu, gajimu, atau jumlah tahun yang kamu tulis di CV. Tarifnya lecet di dengkul, dibayar di tempat, tidak menerima transfer.
+Aspal ternyata guru yang galak. Kerja di mana, gaji berapa, sudah berapa tahun pengalaman, ia tidak peduli. Salah sedikit, dengkul lecet, bayar di tempat.
 
-> _Gravitasi adalah satu-satunya atasan yang tidak pernah bohong soal deadline._
+> _Aduh. Dengkul lagi._
 
-Saya sudah jatuh cukup sering untuk berhenti menganggap jatuh sebagai kabar buruk. Itu bukan filosofi. Itu statistik.
+Lama-lama saya sudah cukup sering jatuh sampai tidak kaget lagi. Jatuh ya jatuh, nanti juga bangun.
 
 ### Kalender
 
-Agustus 2026: surfing. Secara teknis hanya memindahkan tempat jatuh dari beton ke air.
+Agustus nanti rencananya surfing. Jatuhnya pindah ke air, setidaknya tidak lecet.
 
-2027: salju Myoko, lalu Hokkaido. Jatuh dalam bahasa Jepang.
+Tahun 2027, main salju di Myoko, lalu Hokkaido. Jatuh lagi, kali ini di Jepang.
 
-Empat medium, satu keterampilan yang sama—berdiri di atas sesuatu yang tidak stabil dan tetap memilih arah. Saya tidak sedang mengumpulkan hobi. Saya sedang memakai badan ini sebelum ia mulai mengajukan syarat dan ketentuan.
+Longboard, surfskate, ombak, salju. Kalau dipikir-pikir intinya sama saja: berdiri di atas sesuatu yang goyang dan tetap mau ke arah tertentu. Mumpung badan ini masih mau diajak begini.
 
 ### Dua jenis waktu
 
-Adik saya akan menikah. Saya senang, tanpa catatan kaki. Ia memilih jalannya lebih awal dan menjalaninya dengan serius, dan itu pantas dihormati.
+Adik saya sebentar lagi menikah. Saya ikut senang, beneran. Dia tahu apa yang dia mau dari awal dan serius menjalaninya, dan menurut saya itu keren.
 
-Waktu saya berjalan di rute lain: Kyrgyzstan, Kazakhstan, Uzbekistan, China, Nagano. Punggung kuda, jalan tanpa aspal, bahasa yang tidak saya kuasai. Saya tidak melarikan diri dari apa pun. Saya hanya tidak pernah setuju bahwa urutan hidup ditentukan oleh orang-orang yang tidak akan menjalaninya.
+Waktu saya kebanyakan habis di tempat lain: Kyrgyzstan, Kazakhstan, Uzbekistan, China, Nagano. Naik kuda, lewat jalan yang belum diaspal, di tempat yang bahasanya tidak saya mengerti. Saya tidak sedang kabur dari apa-apa. Saya hanya tidak pernah setuju kalau urutan hidup harus ditentukan orang lain.
 
-Dewasa bukan checklist. Checklist itu formulir. Yang menyamakan keduanya biasanya belum pernah ditanya apa yang dia mau.
+Jadi dewasa, buat saya, bukan soal mencentang daftar satu per satu.
 
 ### Tidak ada papan skor
 
-Alam semesta tidak menyimpan skor. Tidak ada juri, tidak ada papan peringkat, tidak ada notaris yang mencatat bahwa kamu tepat waktu. Semua ini akan jadi debu di atas batu yang berputar mengelilingi bola gas yang juga akan mati.
+Kadang saya berpikir, toh tidak ada yang menghitung juga. Tidak ada juri yang mencatat siapa yang duluan dan siapa yang telat. Ujung-ujungnya semua juga akan jadi debu.
 
-Itu bukan alasan untuk menyerah. Itu izin. Kalau memang tidak ada yang mengawasi, tidak ada juga yang berwenang memutuskan bahwa hidup saya salah bentuk.
+Anehnya, itu malah bikin lega. Kalau memang tidak ada yang mengawasi, berarti tidak ada juga yang berhak bilang hidup saya salah urutan.
 
-Jadi saya carve. Saya jatuh. Saya bangun, cek dengkul, lanjut—sampai halaman ini penuh.
+Jadi ya sudah, saya main lagi. Jatuh, bangun, cek dengkul, lanjut.
 
-Terima kasih sudah ikut meluncur. Kalau nanti kita ketemu di trotoar dan saya jatuh, kamu boleh lihat. Asif, _signing off._ 🛹
+Makasih sudah ikut meluncur sampai sini. Kalau nanti kita ketemu di trotoar dan saya jatuh, boleh kok ketawa. Asif, _signing off._ 🛹
 
 </div>
 
