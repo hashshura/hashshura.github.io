@@ -11,7 +11,9 @@ layout: default
 <div class="related">
   <h2>Related Posts</h2>
   <ul class="related-posts">
-    {% for post in site.related_posts limit:3 %}
+    {% comment %}posts marked hidden: true are reachable by link only{% endcomment %}
+    {% assign related = site.related_posts | where_exp: "post", "post.hidden != true" %}
+    {% for post in related limit:3 %}
       <li>
         <h3>
           <a href="{{ site.baseurl }}{{ post.url }}">
