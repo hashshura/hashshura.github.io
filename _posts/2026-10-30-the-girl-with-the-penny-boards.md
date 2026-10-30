@@ -1,9 +1,9 @@
 ---
 layout: post
-title: The girl with the penny boards
+title: The girl with the Penny boards
 comments: true
 thumbnail: /assets/img/2026-10-30-the-girl-with-the-penny-boards.png
-teaser: "Eight couplets, eight small levels. Each line only finishes once you have walked, ridden, or simply waited your way through it."
+teaser: "I saw her sitting there. A short game-poem, written after Wordle's answer turned out to be “penny” and I challenged myself to make a poem of it. And she was still there. So was I."
 ---
 
 <style>
