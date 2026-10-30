@@ -176,21 +176,30 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
     var mark = function(){
       for (var k in padBtns){ if (pad[k]) padBtns[k].classList.add('down'); else padBtns[k].classList.remove('down'); }
     };
-    var clearDir = function(){ pad.l = pad.r = pad.u = pad.d = 0; mark(); };
-    var setDir = function(e){
-      var r = padEl.getBoundingClientRect();
-      var dx = (e.clientX - r.left) - r.width/2, dy = (e.clientY - r.top) - r.height/2;
-      if (Math.abs(dx) > r.width*0.85 || Math.abs(dy) > r.height*0.85){ clearDir(); return; }
-      var dead = Math.min(r.width, r.height) * 0.15;
+    // Each finger on the pad is tracked by its own pointer id, and the held
+    // direction is all of them together: hold ◀ with one thumb, tap ▲ with
+    // another, and lifting ▲ leaves ◀ still held.
+    var touches = {};
+    var recompute = function(){
       var was = pad.l + pad.r*2 + pad.u*4 + pad.d*8;
-      pad.l = dx < -dead ? 1 : 0; pad.r = dx > dead ? 1 : 0;
-      pad.u = dy < -dead ? 1 : 0; pad.d = dy > dead ? 1 : 0;
+      pad.l = pad.r = pad.u = pad.d = 0;
+      for (var id in touches){ var t = touches[id]; pad.l |= t.l; pad.r |= t.r; pad.u |= t.u; pad.d |= t.d; }
       // a direction newly reached also counts as a tap, same as a key
       if (pad.l && !(was&1)) keyTap.l = 1;
       if (pad.r && !(was&2)) keyTap.r = 1;
       if (pad.u && !(was&4)) keyTap.u = 1;
       if (pad.d && !(was&8)) keyTap.d = 1;
       mark();
+    };
+    var release = function(e){ delete touches[e.pointerId]; recompute(); };
+    var setDir = function(e){
+      var r = padEl.getBoundingClientRect();
+      var dx = (e.clientX - r.left) - r.width/2, dy = (e.clientY - r.top) - r.height/2;
+      if (Math.abs(dx) > r.width*0.85 || Math.abs(dy) > r.height*0.85){ release(e); return; }
+      var dead = Math.min(r.width, r.height) * 0.15;
+      touches[e.pointerId] = { l: dx < -dead ? 1 : 0, r: dx > dead ? 1 : 0,
+                               u: dy < -dead ? 1 : 0, d: dy > dead ? 1 : 0 };
+      recompute();
     };
     padEl.addEventListener('pointerdown', function(e){
       e.preventDefault();
@@ -202,9 +211,9 @@ teaser: "Eight couplets, eight small levels. Each line only finishes once you ha
       if (e.cancelable) e.preventDefault();
       setDir(e);
     });
-    padEl.addEventListener('pointerup', clearDir);
-    padEl.addEventListener('pointercancel', clearDir);
-    padEl.addEventListener('lostpointercapture', clearDir);
+    padEl.addEventListener('pointerup', release);
+    padEl.addEventListener('pointercancel', release);
+    padEl.addEventListener('lostpointercapture', release);
     padEl.addEventListener('contextmenu', function(e){ e.preventDefault(); });
   }
 
