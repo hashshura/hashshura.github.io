@@ -436,7 +436,7 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
   // her veranda: posts, a bamboo blind, the daybed with its white mattress
   // and batik pillows, and the pink mat by the door. (bx, by) is the front edge
   // of the deck; she sits on the mattress at SEAT height above it.
-  var SEAT = 27;
+  var SEAT = 17;
   function drawVeranda(bx, by){
     pen(INK, 2);
     box(bx - 92, by - 128, 184, 9, WOOD_D);
@@ -455,8 +455,7 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
     pen(INK, 1); for (var pl=bx - 66; pl < bx + 88; pl += 22) ln(pl, by - 8, pl, by + 4);
     // daybed
     pen(INK, 2);
-    ln(bx - 50, by - SEAT + 14, bx - 50, by - 8); ln(bx + 50, by - SEAT + 14, bx + 50, by - 8);
-    box(bx - 54, by - SEAT + 6, 108, 8, WOOD);
+    box(bx - 54, by - SEAT + 4, 108, 5, WOOD);
     var cols = ['#f0a02a', '#f3b63e', '#efe3c9', '#ece0cb', '#f3c94b'];
     for (var p=0;p<5;p++){
       var px = bx - 40 + p*20;
@@ -465,8 +464,8 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
       pen(p < 2 || p === 4 ? '#b5651d' : '#8a6aa8', 1); ctx.beginPath(); ctx.arc(px - 2, by - SEAT - 10, 3, 0.5, 4); ctx.stroke();
     }
     pen(INK, 2);
-    ctx.beginPath(); ctx.moveTo(bx - 54, by - SEAT + 6); ctx.lineTo(bx - 54, by - SEAT); ctx.quadraticCurveTo(bx - 54, by - SEAT - 3, bx - 50, by - SEAT - 3);
-    ctx.lineTo(bx + 50, by - SEAT - 3); ctx.quadraticCurveTo(bx + 54, by - SEAT - 3, bx + 54, by - SEAT); ctx.lineTo(bx + 54, by - SEAT + 6); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(bx - 54, by - SEAT + 4); ctx.lineTo(bx - 54, by - SEAT); ctx.quadraticCurveTo(bx - 54, by - SEAT - 3, bx - 50, by - SEAT - 3);
+    ctx.lineTo(bx + 50, by - SEAT - 3); ctx.quadraticCurveTo(bx + 54, by - SEAT - 3, bx + 54, by - SEAT); ctx.lineTo(bx + 54, by - SEAT + 4); ctx.closePath();
     ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke();
     // the pink mat on the floor by the door
     pen(INK, 1.4); ctx.beginPath(); ctx.moveTo(bx + 56, by - 18); ctx.lineTo(bx + 76, by - 18); ctx.lineTo(bx + 79, by - 10); ctx.lineTo(bx + 58, by - 10); ctx.closePath();
@@ -520,14 +519,19 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
     ctx.beginPath(); ctx.moveTo(x - hw, top); ctx.lineTo(x + hw, top); ctx.lineTo(x + hw - 1, bot); ctx.lineTo(x - hw + 1, bot); ctx.closePath();
     ctx.fill(); ctx.stroke();
   }
-  // seated on something sy high, feet down at fy: legs stretched out long
+  // Both bodies keep the same proportions in every pose: hip to crown is the
+  // same standing or sitting, and seated legs fold at the knee rather than
+  // stretching to reach the floor.
+  // seated on something sy high, feet down at fy
   function girlSit(gx, sy, fy, look){
-    var hx = gx + look*1.1, hy = sy - 25;
+    var hx = gx + look*1.1, hy = sy - 22;
     hairBack(hx, hy, 19);
-    pen(INK, 2.2); ln(gx - 3, sy + 1, gx - 9, fy); ln(gx + 3, sy + 1, gx + 8, fy);
-    ell(gx - 10, fy + 1, 3.3, 2); ell(gx + 9, fy + 1, 3.3, 2);
-    tee(gx, sy - 17, sy + 1, 6);
-    pen(INK, 1.9); ln(gx - 6, sy - 15, gx - 11, sy); ln(gx + 6, sy - 15, gx + 11, sy);
+    pen(INK, 2.2);
+    ln(gx - 3, sy, gx - 5, sy + 3); ln(gx - 5, sy + 3, gx - 5, fy);
+    ln(gx + 3, sy, gx + 5, sy + 3); ln(gx + 5, sy + 3, gx + 5, fy);
+    ell(gx - 6, fy + 1, 3, 1.8); ell(gx + 6, fy + 1, 3, 1.8);
+    tee(gx, sy - 16, sy + 1, 6);
+    pen(INK, 1.9); ln(gx - 6, sy - 14, gx - 11, sy); ln(gx + 6, sy - 14, gx + 11, sy);
     girlFace(hx, hy, look || 0);
   }
   function girlStand(x, y, f, step, riding){
@@ -555,7 +559,8 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
   function me(x, y, f, step, pose, moving, fy){
     pen(INK, 2.3);
     if (pose === 'sit'){
-      ln(x - 3, y, x - 5, fy); ln(x + 3, y, x + 5, fy);
+      ln(x, y, x - 5, y + 3); ln(x - 5, y + 3, x - 5, fy);
+      ln(x, y, x + 5, y + 3); ln(x + 5, y + 3, x + 5, fy);
       ln(x, y, x, y - 18);
       pen(INK, 2); ln(x, y - 15, x - 7, y - 1); ln(x, y - 15, x + 7, y - 1);
       meHead(x, y - 27, 0);
@@ -759,25 +764,26 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
       .concat([[372,192],[362,158]]).concat(quad([362,158],[356,149],[334,146],6).slice(1))
       .concat(quad([334,146],[320,164],[306,146],8).slice(1));
     var strokes = [
-      {pts:dense(legL, 3), col:INK, n:2}, {pts:dense(legR, 3), col:INK, n:2},
-      {pts:dense(head, 3), col:INK, n:5}, {pts:hair, col:HAIR, n:7}, {pts:dense(shirt, 3), col:INK, n:8}
+      {pts:dense(legL, 3), col:INK, n:1}, {pts:dense(legR, 3), col:INK, n:1},
+      {pts:dense(head, 3), col:INK, n:3}, {pts:hair, col:HAIR, n:4}, {pts:dense(shirt, 3), col:INK, n:4}
     ];
+    // every penny draws a share of its stroke, the last one finishing it
     var coins = [];
     strokes.forEach(function(st, si){
-      for (var k=0;k<st.n;k++){
-        var idx = Math.round(k*(st.pts.length - 1)/(st.n - 1));
+      for (var k=1;k<=st.n;k++){
+        var idx = Math.round(k*(st.pts.length - 1)/st.n);
         coins.push({x:st.pts[idx][0], y:st.pts[idx][1], s:si, idx:idx, got:false});
       }
     });
     S.strokes = strokes; S.coins = coins;
   }
   LV.push({
-    init: function(){ portrait(); S.next = 0; S.parts = []; S.lit = 0; P = newPlayer(70, 372); },
+    init: function(){ portrait(); S.next = 0; S.parts = []; S.lit = 0; P = newPlayer(200, 330); },
     update: function(D, live){
-      walk(D, 1.4); bounds(P, 10, 50, W-10, H-6);   // a brisker walk: the outline is long
+      walk(D, 1.6); bounds(P, 10, 50, W-10, H-6);   // a brisker walk: the outline is long
       if (live){
         var c = S.coins[S.next];
-        if (c && dist(P.x, P.y - 8, c.x, c.y) < 15){
+        if (c && dist(P.x, P.y - 8, c.x, c.y) < 18){
           c.got = true; S.next++; sparkle(S.parts, c.x, c.y, 6);
           if (S.next >= S.coins.length) complete();
         }
