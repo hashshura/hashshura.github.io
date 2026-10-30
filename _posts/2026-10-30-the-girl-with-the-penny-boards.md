@@ -350,6 +350,36 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
     P.x += P.vx; P.y += P.vy;
     P.face = Math.cos(P.h) >= 0 ? 1 : -1;
     if (P.pumpFx > 0) P.pumpFx--;
+    // the wake it leaves, and how long it has been going nowhere
+    P.trail = P.trail || [];
+    if (Math.abs(P.s) > 0.3 && S.t % 3 === 0) P.trail.push({x:P.x, y:P.y, t:S.t});
+    while (P.trail.length && S.t - P.trail[0].t > WAKE) P.trail.shift();
+    P.stuck = P.s < 0.6 ? (P.stuck || 0) + 1 : 0;
+  }
+  var WAKE = 150;
+  // Drawn on the ground under Rambo: a fading S where it has carved, and once
+  // it has sat going nowhere for a while, a dotted S toward where it should go.
+  function drawWake(toward){
+    var tr = P.trail, i;
+    if (tr && tr.length > 1){
+      pen('#d98ab0', 1.6);
+      for (i=1;i<tr.length;i++){
+        var a = tr[i-1], b = tr[i];
+        if (Math.abs(b.x - a.x) + Math.abs(b.y - a.y) > 24) continue;   // a wrap or a fall, not a carve
+        ctx.globalAlpha = 0.7 * (1 - (S.t - b.t)/WAKE);
+        ln(a.x, a.y + 1, b.x, b.y + 1);
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (P.mode !== 'r' || !(P.stuck > 240) || mode !== 'play') return;
+    var show = Math.min(1, (P.stuck - 240)/90) * (0.45 + Math.sin(S.t*0.06)*0.15);
+    var ux = Math.cos(toward), uy = Math.sin(toward);
+    ctx.globalAlpha = show; ctx.fillStyle = '#c2457d';
+    for (var d=16; d<=150; d+=7){
+      var off = Math.sin((d - 16)*TAU/90)*13;
+      ctx.beginPath(); ctx.arc(P.x + ux*d - uy*off, P.y + uy*d + ux*off, 1.5, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 
   // ---- drawing helpers ----
@@ -588,6 +618,26 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
     if (alpha != null) ctx.globalAlpha = ga * alpha;
     ctx.save(); ctx.translate(x, y); ctx.scale(f || 1, 1);
     var top = -(2*wr + 2) - h, bot = top + h;
+    if (kind === 'r'){
+      // Rambo is a surfskate: a little surfboard on wheels, rounded tail,
+      // a pointed nose, and a stringer down the middle
+      var yc = top + h*0.5;
+      pen(INK, 1.5);
+      ln(-L+5, bot, -L+5, -wr); ln(L-6, bot, L-6, -wr);
+      circ(-L+5, -wr, wr, PAPER); circ(L-6, -wr, wr, PAPER);
+      ctx.beginPath();
+      ctx.moveTo(L+6, yc);
+      ctx.quadraticCurveTo(L-3, top - 1.5, -L+5, top);
+      ctx.quadraticCurveTo(-L-1, top, -L-1, yc);
+      ctx.quadraticCurveTo(-L-1, bot, -L+5, bot);
+      ctx.quadraticCurveTo(L-3, bot + 1, L+6, yc);
+      ctx.closePath();
+      ctx.fillStyle = col; ctx.fill(); pen(INK, 1.8); ctx.stroke();
+      pen('#ffffff', 1.1); ln(-L+1, yc, L+3, yc);
+      ctx.restore();
+      ctx.globalAlpha = ga;
+      return -top;
+    }
     pen(INK, 1.5);
     ln(-L+5, bot, -L+5, -wr); ln(L-5, bot, L-5, -wr);
     circ(-L+5, -wr, wr, PAPER); circ(L-5, -wr, wr, PAPER);
@@ -936,6 +986,7 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
         ctx.stroke();
       });
 
+      drawWake(Math.atan2(S.by + 20 - P.y, S.bx - P.x));
       var list = [];
       list.push({y:S.by - VBACK, f:function(){ drawVeranda(S.bx, S.by); girlSit(S.gx, S.by - SEAT, S.by - 6, clamp((P.x - S.gx)/120, -1, 1)); }});
       S.boards.forEach(function(b){
@@ -1375,6 +1426,7 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
         drawCoin(c.x, c.y, c.kind.r, c.kind.c, c.kind.rim);
       }
       drawParts(S.parts);
+      drawWake(0);
       var G = S.G, list = [];
       list.push({y:G.y, f:function(){ var deck = drawBoard('t', G.x, G.y, 1); girlStand(G.x, G.y - deck, 1, 0, true); }});
       list.push({y:P.y, f:function(){
