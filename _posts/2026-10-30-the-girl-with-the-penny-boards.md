@@ -966,25 +966,66 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
 
   // 4 — a penny for your thoughts. Her thoughts drift above her; rushing
   // scares them off. Stand still near her and they come to you, one by one.
-  var ICONS = 6;
+  // What she thinks about: flowers, singing, dancing, hiking, surfing,
+  // pottery, reading, cooking. Each drawn small enough to sit in a bubble.
+  var ICONS = 8;
   function drawIcon(k, x, y){
+    var i;
     pen(INK, 1.4);
-    if (k === 0){ ctx.save(); ctx.translate(x, y + 4); ctx.scale(0.55, 0.55); drawBoard('t', 0, 0, 1); ctx.restore(); }
-    else if (k === 1){ ctx.save(); ctx.translate(x, y + 4); ctx.scale(0.45, 0.45); drawBoard('r', 0, 0, 1); ctx.restore(); }
-    else if (k === 2){
-      ctx.beginPath();
-      for (var i=0;i<10;i++){ var a = -Math.PI/2 + i*Math.PI/5, r = i%2 ? 2.6 : 6; ctx.lineTo(x + Math.cos(a)*r, y + Math.sin(a)*r); }
-      ctx.closePath(); ctx.fillStyle = YEL; ctx.fill(); ctx.stroke();
+    if (k === 0){
+      // a flower
+      pen('#5a8a3a', 1.4); ln(x, y + 1, x, y + 8); ln(x, y + 5, x + 3, y + 3);
+      pen(INK, 1);
+      for (i=0;i<5;i++){ var pa = -Math.PI/2 + i*TAU/5; circ(x + Math.cos(pa)*3.2, y - 2 + Math.sin(pa)*3.2, 2.3, '#f29bbd'); }
+      circ(x, y - 2, 1.8, YEL);
+    } else if (k === 1){
+      // singing: two notes, beamed
+      ctx.fillStyle = INK;
+      ctx.beginPath(); ctx.ellipse(x - 4, y + 5, 2.4, 1.8, -0.4, 0, TAU); ctx.ellipse(x + 4, y + 3, 2.4, 1.8, -0.4, 0, TAU); ctx.fill();
+      pen(INK, 1.3); ln(x - 1.8, y + 4.5, x - 1.8, y - 5); ln(x + 6.2, y + 2.5, x + 6.2, y - 7);
+      pen(INK, 2.2); ln(x - 1.8, y - 5, x + 6.2, y - 7);
+    } else if (k === 2){
+      // dancing: a twirl, one arm up, a skirt flaring
+      pen(INK, 1.2); circ(x + 1, y - 6, 2, PAPER);
+      pen(INK, 1.3); ln(x + 0.5, y - 4, x, y + 1);
+      ln(x + 0.3, y - 2.5, x + 5, y - 7); ln(x + 0.3, y - 2.5, x - 5, y - 1);
+      ln(x - 0.5, y + 4, x - 3, y + 8); ln(x + 0.5, y + 4, x + 5, y + 6);
+      ctx.beginPath(); ctx.moveTo(x - 0.5, y); ctx.lineTo(x - 5, y + 5); ctx.quadraticCurveTo(x, y + 3, x + 5, y + 4.5); ctx.closePath();
+      ctx.fillStyle = PINK; ctx.fill(); ctx.stroke();
     } else if (k === 3){
-      pen('#3b7ea1', 1.8); ctx.beginPath();
-      for (var j=0;j<=12;j++){ var xx = x - 6 + j, yy = y + Math.sin(j*0.9)*2.5; if (j) ctx.lineTo(xx, yy); else ctx.moveTo(xx, yy); }
-      ctx.stroke();
+      // hiking: a peak with a flag on it
+      ctx.beginPath(); ctx.moveTo(x - 8, y + 6); ctx.lineTo(x - 1, y - 4); ctx.lineTo(x + 2, y); ctx.lineTo(x + 4, y - 2); ctx.lineTo(x + 8, y + 6); ctx.closePath();
+      ctx.fillStyle = '#c9d8b4'; ctx.fill(); ctx.stroke();
+      pen(INK, 1); ln(x - 1, y - 4, x - 1, y - 9);
+      ctx.beginPath(); ctx.moveTo(x - 1, y - 9); ctx.lineTo(x + 3, y - 7.8); ctx.lineTo(x - 1, y - 6.6); ctx.closePath(); ctx.fillStyle = '#e0533d'; ctx.fill();
     } else if (k === 4){
-      ctx.beginPath(); ctx.arc(x, y, 5.5, 0.6, TAU - 0.6, false); ctx.arc(x + 3, y, 4.2, TAU - 0.9, 0.9, true); ctx.closePath();
-      ctx.fillStyle = '#f5e7a8'; ctx.fill(); ctx.stroke();
+      // surfing and surfskating: Rambo riding a wave
+      pen('#3b7ea1', 1.6); ctx.beginPath();
+      for (i=0;i<=14;i++){ var wx = x - 7 + i, wy = y + 6 + Math.sin(i*0.8)*1.6; if (i) ctx.lineTo(wx, wy); else ctx.moveTo(wx, wy); }
+      ctx.stroke();
+      ctx.save(); ctx.translate(x, y + 2); ctx.scale(0.42, 0.42); drawBoard('r', 0, 0, 1); ctx.restore();
+    } else if (k === 5){
+      // pottery: a pot, just thrown
+      ctx.beginPath();
+      ctx.moveTo(x - 3, y - 7); ctx.lineTo(x + 3, y - 7);
+      ctx.quadraticCurveTo(x + 2, y - 4, x + 5, y);
+      ctx.quadraticCurveTo(x + 7, y + 5, x + 3, y + 7); ctx.lineTo(x - 3, y + 7);
+      ctx.quadraticCurveTo(x - 7, y + 5, x - 5, y);
+      ctx.quadraticCurveTo(x - 2, y - 4, x - 3, y - 7); ctx.closePath();
+      ctx.fillStyle = '#c8794f'; ctx.fill(); ctx.stroke();
+      pen('#8f4f2e', 1); ln(x - 5, y + 1, x + 5, y + 1);
+    } else if (k === 6){
+      // reading: an open book
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.moveTo(x, y - 3); ctx.quadraticCurveTo(x - 4, y - 6, x - 8, y - 4); ctx.lineTo(x - 8, y + 5); ctx.quadraticCurveTo(x - 4, y + 3, x, y + 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y - 3); ctx.quadraticCurveTo(x + 4, y - 6, x + 8, y - 4); ctx.lineTo(x + 8, y + 5); ctx.quadraticCurveTo(x + 4, y + 3, x, y + 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+      pen('#999', 0.8); ln(x - 6, y - 1, x - 2, y); ln(x - 6, y + 2, x - 2, y + 3); ln(x + 2, y, x + 6, y - 1); ln(x + 2, y + 3, x + 6, y + 2);
     } else {
-      ctx.beginPath(); ctx.moveTo(x - 7, y + 4); ctx.lineTo(x - 2, y - 4); ctx.lineTo(x + 1, y); ctx.lineTo(x + 3, y - 2); ctx.lineTo(x + 7, y + 4); ctx.closePath();
-      ctx.fillStyle = '#dfe6ee'; ctx.fill(); ctx.stroke();
+      // cooking: a pan with an egg in it
+      pen(INK, 2.2); ln(x + 4, y + 1, x + 9, y - 3);
+      pen(INK, 1.4); circ(x - 1, y + 2, 6, '#5b5b5b');
+      ctx.beginPath(); ctx.ellipse(x - 1.5, y + 2, 3.6, 3, 0.3, 0, TAU); ctx.fillStyle = '#ffffff'; ctx.fill();
+      circ(x - 1, y + 2, 1.4, YEL);
     }
   }
   function drawBubble(b, alpha){
@@ -1004,7 +1045,7 @@ A short game-poem, written after Wordle's answer turned out to be “penny” an
       S.got = 0; S.still = 0; S.cool = 0; S.scared = 0;
       P = newPlayer(320, 340);
     },
-    home: function(b){ return {x:S.gx + Math.cos(b.a + S.t*0.006)*60, y:S.by - 104 + Math.sin(b.a + S.t*0.006)*20}; },
+    home: function(b){ return {x:S.gx + Math.cos(b.a + S.t*0.006)*72, y:S.by - 104 + Math.sin(b.a + S.t*0.006)*22}; },
     update: function(D, live){
       walk(D); collide(P, 7, S.solids); bounds(P, 10, 44, W-10, SHORE - 4);
       var sp = Math.hypot(P.vx, P.vy), d = dist(P.x, P.y, S.gx, S.by);
