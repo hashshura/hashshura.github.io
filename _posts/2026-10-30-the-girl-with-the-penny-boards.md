@@ -1,6 +1,7 @@
 ---
 layout: post
 title: The girl with the Penny boards
+hidden: true
 comments: true
 thumbnail: /assets/img/2026-10-30-the-girl-with-the-penny-boards.png
 teaser: "I saw her sitting there. A short game-poem, written after Wordle's answer turned out to be “penny” and I challenged myself to make a poem of it. And she was still there. So was I."
