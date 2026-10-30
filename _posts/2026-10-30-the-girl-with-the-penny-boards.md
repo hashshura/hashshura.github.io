@@ -60,6 +60,8 @@ teaser: "I saw her sitting there. A short game-poem, written after Wordle's answ
 .ink-reset:hover,.ink-reset:focus{color:#555;}
 </style>
 
+A short game-poem, written after Wordle's answer turned out to be “penny” and I challenged myself to make a poem of it.
+
 <div id="pb-stage">
   <canvas id="pb-canvas" width="640" height="510"></canvas>
   <div id="pb-controls">
