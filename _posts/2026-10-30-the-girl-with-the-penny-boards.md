@@ -12,7 +12,7 @@ teaser: "I saw her sitting there. A short game-poem, written after Wordle's answ
    around in, but never so tall that the pad falls off the bottom of a phone. */
 #pb-stage{position:relative;left:50%;transform:translateX(-50%);width:calc(100vw - 8px);max-width:880px;margin:0 0 6px;}
 @supports (height: 100dvh) {
-  #pb-stage{width:min(calc(100vw - 8px), max(320px, calc((100dvh - 230px) * 1.25)), 880px);}
+  #pb-stage{width:min(calc(100vw - 8px), max(320px, calc((100dvh - 252px) * 1.25)), 880px);}
 }
 #pb-canvas{display:block;width:100%;height:auto;aspect-ratio:64/51;background:#fbfbf7;border:2px solid #222;border-radius:8px;
   touch-action:pan-y;user-select:none;-webkit-user-select:none;}
@@ -28,7 +28,7 @@ teaser: "I saw her sitting there. A short game-poem, written after Wordle's answ
   display:flex;align-items:center;justify-content:center;padding:0;}
 .pb-btn.down{background:#222;color:#fbfbf7;}
 
-#pb-levels{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin:8px 0 2px;}
+#pb-levels{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin:30px 0 2px;}   /* well clear of the pad, so a thumb overshooting ▼ lands on nothing */
 #pb-levels button{font:inherit;font-size:12px;font-weight:bold;width:30px;height:30px;border:1.5px solid #222;border-radius:50%;
   background:#fbfbf7;color:#222;cursor:pointer;padding:0;}
 #pb-levels button.cur{background:#222;color:#fbfbf7;}
